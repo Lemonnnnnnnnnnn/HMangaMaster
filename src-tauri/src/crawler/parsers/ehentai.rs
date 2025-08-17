@@ -1,0 +1,252 @@
+use crate::crawler::{ParsedGallery, SiteParser, ProgressReporter};
+use crate::request::Client;
+use reqwest::header::{HeaderMap, HeaderValue, COOKIE};
+
+pub struct EhentaiParser;
+
+impl EhentaiParser { pub fn new() -> Self { Self } }
+
+impl SiteParser for EhentaiParser {
+    fn name(&self) -> &'static str { "ehentai" }
+    fn domains(&self) -> &'static [&'static str] { &["e-hentai.org", "exhentai.org"] }
+    fn parse<'a>(&'a self, client: &'a Client, url: &'a str) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
+        Box::pin(async move {
+            // 简化版本：解析画廊页所有缩略图链接，再逐页解析真实大图。
+            let mut headers = HeaderMap::new();
+            headers.insert(COOKIE, HeaderValue::from_static("nw=1"));
+            let first = client.get_with_headers(url, &headers).await?;
+            if !first.status().is_success() { anyhow::bail!("状态码异常: {}", first.status()); }
+            let html = first.text().await?;
+            // 解析首页，提取标题与分页链接，限定在局部作用域，避免非 Send 数据跨 await
+            let (title, mut page_urls): (Option<String>, Vec<String>) = {
+                let doc = scraper::Html::parse_document(&html);
+                // 标题
+                let title = {
+                    let sel = scraper::Selector::parse("#gn").unwrap();
+                    doc.select(&sel).next().map(|n| n.text().collect::<String>()).filter(|s| !s.trim().is_empty())
+                };
+                // 分页：抓取 body > .gtb 中的分页链接，包含当前页
+                let mut page_urls: Vec<String> = vec![url.to_string()];
+                if let Ok(sel_gtb) = scraper::Selector::parse("body > .gtb") {
+                    if let Some(gtb) = doc.select(&sel_gtb).next() {
+                        let sel_td = scraper::Selector::parse("td a").unwrap();
+                        for a in gtb.select(&sel_td) {
+                            if let Some(href) = a.value().attr("href") { page_urls.push(href.to_string()); }
+                        }
+                    }
+                }
+                (title, page_urls)
+            };
+            page_urls.sort();
+            page_urls.dedup();
+
+            // 收集所有小图页链接（#gdt > a） - 并发
+            let mut thumb_pages: Vec<String> = {
+                use futures_util::stream::{self, StreamExt};
+                let results: Vec<Vec<String>> = stream::iter(page_urls.clone())
+                    .map(|p| {
+                        let headers_cloned = headers.clone();
+                        let client_cloned = client.clone();
+                        async move {
+                        let mut local: Vec<String> = vec![];
+                        if let Ok(resp) = client_cloned.get_with_headers(&p, &headers_cloned).await {
+                            if resp.status().is_success() {
+                                if let Ok(h) = resp.text().await {
+                                    let d = scraper::Html::parse_document(&h);
+                                    if let Ok(sel_gdt) = scraper::Selector::parse("#gdt > a") {
+                                        for a in d.select(&sel_gdt) {
+                                            if let Some(href) = a.value().attr("href") { local.push(href.to_string()); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        local
+                        }
+                    })
+                    .buffer_unordered(8)
+                    .collect()
+                    .await;
+                results.into_iter().flatten().collect()
+            };
+            thumb_pages.sort();
+            thumb_pages.dedup();
+            if thumb_pages.is_empty() { anyhow::bail!("未找到任何图片链接"); }
+
+            // 逐个小图页获取真实图片 URL：先拿 #img 的 onerror 里的 nl，再拼接 - 并发
+            let mut image_urls: Vec<String> = {
+                use futures_util::stream::{self, StreamExt};
+                let results: Vec<Option<String>> = stream::iter(thumb_pages.clone())
+                    .map(|tp| {
+                        let headers_cloned = headers.clone();
+                        let client_cloned = client.clone();
+                        async move {
+                        // 第一次请求拿 nl
+                        let resp = client_cloned.get_with_headers(&tp, &headers_cloned).await.ok()?;
+                        if !resp.status().is_success() { return None; }
+                        let h = resp.text().await.ok()?;
+                        // 解析 nl
+                        let nl_val: Option<String> = {
+                            let d = scraper::Html::parse_document(&h);
+                            let sel_img = scraper::Selector::parse("#img").ok()?;
+                            let re_nl = regex::Regex::new(r"nl\('(.+?)'\)").ok()?;
+                            let mut found: Option<String> = None;
+                            if let Some(img) = d.select(&sel_img).next() {
+                                if let Some(onerr) = img.value().attr("onerror") {
+                                    if let Some(caps) = re_nl.captures(onerr) { found = Some(caps.get(1).unwrap().as_str().to_string()); }
+                                }
+                            }
+                            found
+                        };
+                        let nl = nl_val?;
+                        // 第二次请求取最终图
+                        let real_url = format!("{}?nl={}", tp, nl);
+                        let resp2 = client_cloned.get_with_headers(&real_url, &headers_cloned).await.ok()?;
+                        if !resp2.status().is_success() { return None; }
+                        let h2 = resp2.text().await.ok()?;
+                        let d2 = scraper::Html::parse_document(&h2);
+                        let sel_img2 = scraper::Selector::parse("#img").ok()?;
+                        let final_src = d2
+                            .select(&sel_img2)
+                            .next()
+                            .and_then(|img2| img2.value().attr("src"))
+                            .map(|s| s.to_string());
+                        final_src
+                        }
+                    })
+                    .buffer_unordered(8)
+                    .collect()
+                    .await;
+                results.into_iter().flatten().collect()
+            };
+            image_urls.sort();
+            image_urls.dedup();
+            if image_urls.is_empty() { anyhow::bail!("未解析到任何大图链接"); }
+
+            Ok(ParsedGallery { title, image_urls })
+        })
+    }
+    fn parse_with_progress<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
+        Box::pin(async move {
+            let mut headers = HeaderMap::new();
+            headers.insert(COOKIE, HeaderValue::from_static("nw=1"));
+            let first = client.get_with_headers(url, &headers).await?;
+            if !first.status().is_success() { anyhow::bail!("状态码异常: {}", first.status()); }
+            let html = first.text().await?;
+            let (title, mut page_urls): (Option<String>, Vec<String>) = {
+                let doc = scraper::Html::parse_document(&html);
+                let title = {
+                    let sel = scraper::Selector::parse("#gn").unwrap();
+                    doc.select(&sel).next().map(|n| n.text().collect::<String>()).filter(|s| !s.trim().is_empty())
+                };
+                let mut page_urls: Vec<String> = vec![url.to_string()];
+                if let Ok(sel_gtb) = scraper::Selector::parse("body > .gtb") {
+                    if let Some(gtb) = doc.select(&sel_gtb).next() {
+                        let sel_td = scraper::Selector::parse("td a").unwrap();
+                        for a in gtb.select(&sel_td) {
+                            if let Some(href) = a.value().attr("href") { page_urls.push(href.to_string()); }
+                        }
+                    }
+                }
+                (title, page_urls)
+            };
+            page_urls.sort();
+            page_urls.dedup();
+            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:pages"); }
+
+            // 并发收集小图页
+            let mut thumb_pages: Vec<String> = {
+                use futures_util::stream::{self, StreamExt};
+                if let Some(r) = reporter.as_ref() { r.set_total(page_urls.len()); }
+                let results: Vec<Vec<String>> = stream::iter(page_urls.clone())
+                    .map(|p| {
+                        let headers_cloned = headers.clone();
+                        let client_cloned = client.clone();
+                        async move {
+                        let mut local: Vec<String> = vec![];
+                        if let Ok(resp) = client_cloned.get_with_headers(&p, &headers_cloned).await {
+                            if resp.status().is_success() {
+                                if let Ok(h) = resp.text().await {
+                                    let d = scraper::Html::parse_document(&h);
+                                    if let Ok(sel_gdt) = scraper::Selector::parse("#gdt > a") {
+                                        for a in d.select(&sel_gdt) {
+                                            if let Some(href) = a.value().attr("href") { local.push(href.to_string()); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        local
+                        }
+                    })
+                    .buffer_unordered(8)
+                    .collect()
+                    .await;
+                results.into_iter().flatten().collect()
+            };
+            thumb_pages.sort();
+            thumb_pages.dedup();
+            if thumb_pages.is_empty() { anyhow::bail!("未找到任何图片链接"); }
+            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:images"); r.set_total(thumb_pages.len()); }
+
+            // 并发解析最终大图
+            let mut image_urls: Vec<String> = {
+                use futures_util::stream::{self, StreamExt};
+                let results: Vec<Option<String>> = stream::iter(thumb_pages.clone())
+                    .map(|tp| {
+                        let headers_cloned = headers.clone();
+                        let client_cloned = client.clone();
+                        let rep = reporter.clone();
+                        async move {
+                        let resp = client_cloned.get_with_headers(&tp, &headers_cloned).await.ok()?;
+                        if !resp.status().is_success() { return None; }
+                        let h = resp.text().await.ok()?;
+                        let nl_val: Option<String> = {
+                            let d = scraper::Html::parse_document(&h);
+                            let sel_img = scraper::Selector::parse("#img").ok()?;
+                            let re_nl = regex::Regex::new(r"nl\('(.+?)'\)").ok()?;
+                            let mut found: Option<String> = None;
+                            if let Some(img) = d.select(&sel_img).next() {
+                                if let Some(onerr) = img.value().attr("onerror") {
+                                    if let Some(caps) = re_nl.captures(onerr) { found = Some(caps.get(1).unwrap().as_str().to_string()); }
+                                }
+                            }
+                            found
+                        };
+                        let nl = nl_val?;
+                        let real_url = format!("{}?nl={}", tp, nl);
+                        let resp2 = client_cloned.get_with_headers(&real_url, &headers_cloned).await.ok()?;
+                        if !resp2.status().is_success() { return None; }
+                        let h2 = resp2.text().await.ok()?;
+                        let d2 = scraper::Html::parse_document(&h2);
+                        let sel_img2 = scraper::Selector::parse("#img").ok()?;
+                        let final_src = d2
+                            .select(&sel_img2)
+                            .next()
+                            .and_then(|img2| img2.value().attr("src"))
+                            .map(|s| s.to_string());
+                        if let Some(r) = rep.as_ref() { r.inc(1); }
+                        final_src
+                        }
+                    })
+                    .buffer_unordered(8)
+                    .collect()
+                    .await;
+                results.into_iter().flatten().collect()
+            };
+            image_urls.sort();
+            image_urls.dedup();
+            if image_urls.is_empty() { anyhow::bail!("未解析到任何大图链接"); }
+
+            Ok(ParsedGallery { title, image_urls })
+        })
+    }
+}
+
+pub fn register() {
+    use crate::crawler::factory::{register, register_host_contains};
+    register("ehentai", || Box::new(EhentaiParser::new()));
+    register_host_contains("ehentai", vec!["e-hentai.org", "exhentai.org"]);
+}
+
+
