@@ -13,6 +13,7 @@ mod crawler;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(app::AppState::new())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -22,7 +23,6 @@ pub fn run() {
             state.init_config(app_handle.clone())?;
             Ok(())
         })
-        .manage(app::AppState::new())
         .invoke_handler(tauri::generate_handler![
             // config
             commands::config_get_active_library,

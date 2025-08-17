@@ -39,10 +39,12 @@ impl AppState {
     }
 
     pub fn init_config(&self, handle: AppHandle) -> anyhow::Result<()> {
-        let mut mgr = self.config.write();
-        mgr.set_path_from_app(&handle)?;
-        mgr.load_or_default()?;
-        // 初始化请求客户端与配置的代理对齐
+        {
+            let mut mgr = self.config.write();
+            mgr.set_path_from_app(&handle)?;
+            mgr.load_or_default()?;
+        }
+        // 初始化请求客户端与配置的代理对齐（需在释放写锁后调用，避免死锁）
         self.rebuild_request_client()?;
         Ok(())
     }
