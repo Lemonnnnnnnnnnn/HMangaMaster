@@ -29,10 +29,11 @@ async function getActiveLibrary() {
     activeLibrary.value = library;
 }
 
-
 onMounted(async () => {
+    // 初始化数据加载
     loading.value = true;
     getActiveLibrary();
+
     const mangaService = new MangaService();
     await mangaService.initialize();
 

@@ -24,15 +24,24 @@ export class MangaService {
     // 初始化数据加载
     await invoke('library_load_active');
 
-    const mangasData = await invoke<Manga[]>('library_get_all_mangas');
+    // 后端返回字段为 snake_case，需要转换为前端的 camelCase 接口
+    const rawList = await invoke<any[]>('library_get_all_mangas');
+    const mangasData: Manga[] = rawList.map((m) => ({
+      name: m.name,
+      path: m.path,
+      previewImg: m.preview_img ?? m.previewImg ?? '',
+      imagesCount: m.images_count ?? m.imagesCount ?? 0
+    }));
     this.homeStore.mangas = mangasData;
 
     // 预加载每个漫画的预览图
     const imageCache = this.homeStore.mangaImages;
     for (let manga of mangasData) {
-      if (!imageCache.has(manga.previewImg)) {
-        const imageUrl = await invoke<string>('library_get_image_data_url', { path: manga.previewImg });
-        imageCache.set(manga.previewImg, imageUrl);
+      const imagePath = manga.previewImg;
+      if (!imagePath) continue;
+      if (!imageCache.has(imagePath)) {
+        const imageUrl = await invoke<string>('library_get_image_data_url', { path: imagePath });
+        imageCache.set(imagePath, imageUrl);
       }
     }
     this.homeStore.mangaImages = imageCache;
