@@ -126,7 +126,10 @@ export class MangaService {
   }
 
   async deleteAndViewNextManga() {
-    if (this.mangaStore.currentMangaIndex >= 0 && confirm(`确定要删除 "${this.mangaStore.mangaName}" 并查看下一部漫画吗？`)) {
+    if (this.mangaStore.currentMangaIndex >= 0) {
+      const check = await confirm(`确定要删除 "${this.mangaStore.mangaName}" 并查看下一部漫画吗？`)
+      if (!check) return
+
       this.mangaStore.loading = true;
 
       try {
