@@ -215,11 +215,15 @@ pub async fn task_start_crawl(state: State<'_, AppState>, app: tauri::AppHandle,
     // 解析阶段进度上报适配：仅设置 stage/total，不改变下载进度条
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use parking_lot::RwLock as PLRwLock;
     struct TaskParseReporter {
         id: String,
         app: tauri::AppHandle,
         total: AtomicUsize,
         current: AtomicUsize,
+        task_mgr: Arc<PLRwLock<crate::task::TaskManager>>,
+        stage: PLRwLock<String>,
+        prefix: String,
     }
     impl crawler::ProgressReporter for TaskParseReporter {
         fn set_total(&self, total: usize) {
@@ -230,6 +234,15 @@ pub async fn task_start_crawl(state: State<'_, AppState>, app: tauri::AppHandle,
                 "stage": "parsingTotal",
                 "total": total
             }));
+            // 根据当前阶段更新任务名称
+            let stage = self.stage.read().clone();
+            if stage == "parsing:pages" {
+                let name = format!("{}正在获取专辑页面 (0/{}页)", self.prefix, total);
+                self.task_mgr.read().set_name(&self.id, &name);
+            } else if stage == "parsing:images" {
+                let name = format!("{}正在解析图片链接 (0/{}张)", self.prefix, total);
+                self.task_mgr.read().set_name(&self.id, &name);
+            }
         }
         fn inc(&self, delta: usize) {
             let new_cur = self.current.fetch_add(delta, Ordering::Relaxed) + delta;
@@ -240,10 +253,53 @@ pub async fn task_start_crawl(state: State<'_, AppState>, app: tauri::AppHandle,
                 "current": new_cur,
                 "total": total
             }));
+            // 在递增时根据阶段刷新任务名称
+            let stage = self.stage.read().clone();
+            if stage == "parsing:images" && total > 0 {
+                let name = format!("{}正在解析图片链接 ({} / {}张)", self.prefix, new_cur, total);
+                self.task_mgr.read().set_name(&self.id, &name);
+            } else if stage == "parsing:pages" && total > 0 {
+                let name = format!("{}正在获取专辑页面 ({} / {}页)", self.prefix, new_cur, total);
+                self.task_mgr.read().set_name(&self.id, &name);
+            }
         }
-        fn set_stage(&self, stage: &str) { let _ = self.app.emit("download:progress", serde_json::json!({"taskId": self.id, "stage": stage})); }
+        fn set_stage(&self, stage: &str) {
+            {
+                let mut w = self.stage.write();
+                *w = stage.to_string();
+            }
+            let _ = self.app.emit("download:progress", serde_json::json!({"taskId": self.id, "stage": stage}));
+            // 特殊规则：以 taskName: 前缀直接设置任务名称
+            if let Some(rest) = stage.strip_prefix("taskName:") {
+                self.task_mgr.read().set_name(&self.id, rest);
+                return;
+            }
+            // 常规阶段的任务名称
+            match stage {
+                "parsing:album" => {
+                    let name = format!("{}正在获取专辑信息", self.prefix);
+                    self.task_mgr.read().set_name(&self.id, &name);
+                }
+                "parsing:pages" => {
+                    let total = self.total.load(Ordering::Relaxed);
+                    let name = if total > 0 { format!("{}正在获取专辑页面 (0/{}页)", self.prefix, total) } else { format!("{}正在获取专辑页面", self.prefix) };
+                    self.task_mgr.read().set_name(&self.id, &name);
+                }
+                "parsing:images" => {
+                    let total = self.total.load(Ordering::Relaxed);
+                    let name = if total > 0 { format!("{}正在解析图片链接 (0/{}张)", self.prefix, total) } else { format!("{}正在解析图片链接", self.prefix) };
+                    self.task_mgr.read().set_name(&self.id, &name);
+                }
+                "parsing:done" => {
+                    let name = format!("{}解析完成，准备下载", self.prefix);
+                    self.task_mgr.read().set_name(&self.id, &name);
+                }
+                _ => {}
+            }
+        }
     }
-    let reporter = Arc::new(TaskParseReporter { id: task_id.clone(), app: app.clone(), total: AtomicUsize::new(0), current: AtomicUsize::new(0) });
+    let prefix = if url.contains("e-hentai.org") || url.contains("exhentai.org") { "EHentai - ".to_string() } else { String::new() };
+    let reporter = Arc::new(TaskParseReporter { id: task_id.clone(), app: app.clone(), total: AtomicUsize::new(0), current: AtomicUsize::new(0), task_mgr: state.task_manager.clone(), stage: PLRwLock::new(String::new()), prefix });
     // 解析阶段支持取消
     let parsed = match {
         let fut = crawler::parse_gallery_auto(&client, &url, Some(reporter));
@@ -316,16 +372,6 @@ fn infer_ext_from_url(url: &str) -> Option<&'static str> {
     if path.ends_with(".png") { return Some("png"); }
     if path.ends_with(".gif") { return Some("gif"); }
     None
-}
-#[tauri::command]
-pub async fn task_start_batch_download(state: State<'_, AppState>, app: tauri::AppHandle, task_id: String, urls: Vec<String>, save_paths: Vec<String>) -> Result<bool, String> {
-    use std::path::PathBuf;
-    if urls.len() != save_paths.len() { return Err("urls 与 save_paths 数量不一致".into()); }
-    let paths: Vec<PathBuf> = save_paths.into_iter().map(PathBuf::from).collect();
-    let client = { state.request.read().clone() };
-    let token = state.task_manager.read().start_batch(app, task_id.clone(), urls, paths, client, None, None);
-    state.cancels.write().insert(task_id.clone(), token);
-    Ok(true)
 }
 
 #[tauri::command]

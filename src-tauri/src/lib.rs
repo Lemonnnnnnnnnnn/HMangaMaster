@@ -51,7 +51,6 @@ pub fn run() {
             // download
             commands::download_file,
             // task
-            commands::task_start_batch_download,
             commands::task_cancel,
             commands::task_all,
             commands::task_active,

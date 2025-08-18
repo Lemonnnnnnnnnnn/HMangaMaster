@@ -185,6 +185,7 @@ impl SiteParser for EhentaiParser {
             let client = client.with_limit(self.concurrency);
             let mut headers = HeaderMap::new();
             headers.insert(COOKIE, HeaderValue::from_static("nw=1"));
+            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:album"); }
             let first = client.get_with_headers_rate_limited(url, &headers).await?;
             if !first.status().is_success() {
                 anyhow::bail!("状态码异常: {}", first.status());
@@ -228,6 +229,7 @@ impl SiteParser for EhentaiParser {
                     .map(|p| {
                         let headers_cloned = headers.clone();
                         let client_cloned = client.clone();
+                        let rep = reporter.clone();
                         async move {
                             let mut local: Vec<String> = vec![];
                             if let Ok(resp) = client_cloned
@@ -247,6 +249,7 @@ impl SiteParser for EhentaiParser {
                                     }
                                 }
                             }
+                            if let Some(r) = rep.as_ref() { r.inc(1); }
                             local
                         }
                     })
@@ -329,6 +332,7 @@ impl SiteParser for EhentaiParser {
             if image_urls.is_empty() {
                 anyhow::bail!("未解析到任何大图链接");
             }
+            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:done"); }
 
             Ok(ParsedGallery { title, image_urls })
         })

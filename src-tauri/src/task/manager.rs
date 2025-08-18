@@ -59,6 +59,14 @@ impl TaskManager {
         }
     }
 
+    pub fn set_name(&self, task_id: &str, name: &str) {
+        let mut w = self.tasks.write();
+        if let Some(t) = w.get_mut(task_id) {
+            t.name = name.to_string();
+            t.updated_at = now_str();
+        }
+    }
+
     pub fn set_completed(&self, task_id: &str, save_path: Option<&str>) {
         let mut w = self.tasks.write();
         if let Some(t) = w.get_mut(task_id) {
