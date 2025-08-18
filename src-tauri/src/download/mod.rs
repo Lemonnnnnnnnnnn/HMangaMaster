@@ -16,6 +16,8 @@ pub struct Downloader { req: RequestClient, config: Config, default_headers: Opt
 impl Downloader {
     pub fn new(req: RequestClient, config: Config) -> Self { Self { req, config, default_headers: None } }
     pub fn new_with_headers(req: RequestClient, config: Config, headers: Option<HeaderMap>) -> Self { Self { req, config, default_headers: headers } }
+    // 允许外部覆写请求层的并发上限（例如站点特殊需求）
+    pub fn set_request_limit(&mut self, permits: usize) { self.req.set_limit(permits); }
 
     pub async fn download_file(&self, url: &str, file_path: &Path) -> anyhow::Result<()> {
         if let Some(parent) = file_path.parent() { tokio::fs::create_dir_all(parent).await?; }
@@ -24,8 +26,8 @@ impl Downloader {
         for attempt in 0..=self.config.retry_count {
             if attempt > 0 { tokio::time::sleep(std::time::Duration::from_secs(self.config.retry_delay_secs)).await; }
             let resp_result = match self.default_headers.as_ref() {
-                Some(h) => self.req.get_with_headers(url, h).await,
-                None => self.req.get(url).await,
+                Some(h) => self.req.get_with_headers_rate_limited(url, h).await,
+                None => self.req.get_rate_limited(url).await,
             };
             match resp_result {
                 Ok(resp) => {
