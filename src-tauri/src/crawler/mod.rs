@@ -115,11 +115,6 @@ pub async fn parse_gallery_auto(
 	anyhow::bail!("未匹配到任何站点解析器，请检查 URL 或稍后重试")
 }
 
-// 兼容旧接口：直接走通用解析
-pub async fn parse_gallery(client: &Client, url: &str) -> anyhow::Result<ParsedGallery> {
-	ensure_builtin_registered();
-	GenericParser::new().parse(client, url).await
-}
 
 fn is_http_url(s: &str) -> bool { s.starts_with("http://") || s.starts_with("https://") }
 

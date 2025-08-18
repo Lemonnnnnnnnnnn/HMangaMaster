@@ -31,15 +31,6 @@ impl Client {
 
     pub async fn head(&self, url: &str) -> anyhow::Result<reqwest::Response> { Ok(self.http.head(url).send().await?) }
 
-    pub async fn post_form(&self, url: &str, form: &[(impl AsRef<str>, impl AsRef<str>)]) -> anyhow::Result<reqwest::Response> {
-        let mut pairs: Vec<(String, String)> = Vec::with_capacity(form.len());
-        for (k, v) in form.iter() { pairs.push((k.as_ref().to_string(), v.as_ref().to_string())); }
-        Ok(self.http.post(url)
-            .header("X-Requested-With", "XMLHttpRequest")
-            .form(&pairs)
-            .send().await?)
-    }
-
     pub async fn get_with_headers(&self, url: &str, headers: &HeaderMap) -> anyhow::Result<reqwest::Response> {
         let mut req = self.http.get(url);
         for (k, v) in headers.iter() { req = req.header(k, v); }

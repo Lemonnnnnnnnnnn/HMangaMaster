@@ -50,7 +50,6 @@ pub fn run() {
             commands::history_clear,
             // download
             commands::download_file,
-            commands::download_files,
             // task
             commands::task_start_batch_download,
             commands::task_cancel,

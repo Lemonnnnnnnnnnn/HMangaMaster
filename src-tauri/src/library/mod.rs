@@ -1,8 +1,7 @@
 use serde::Serialize;
 use base64::Engine as _;
 use std::fs;
-use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
+use std::path::{Path};
 
 #[derive(Clone, Serialize)]
 pub struct Manga {
@@ -94,7 +93,6 @@ fn is_image_file(p: &Path) -> bool {
 }
 
 fn page_offset_key(p: &str) -> (i64, i64, String) {
-    use std::cmp::Ordering;
     let name = std::path::Path::new(p).file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
     let stem = name.split('.').next().unwrap_or("");
     let parts: Vec<&str> = stem.split('_').collect();

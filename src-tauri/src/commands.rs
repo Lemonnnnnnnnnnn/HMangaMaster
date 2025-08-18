@@ -157,24 +157,6 @@ pub async fn download_file(state: State<'_, AppState>, app: tauri::AppHandle, ur
     }
 }
 
-// 批量下载：并发受 downloader::Config 控制，按条目进度派发事件
-#[tauri::command]
-pub async fn download_files(state: State<'_, AppState>, app: tauri::AppHandle, urls: Vec<String>, save_paths: Vec<String>) -> Result<bool, String> {
-    use std::path::PathBuf;
-    if urls.len() != save_paths.len() { return Err("urls 与 save_paths 数量不一致".into()); }
-    let client = { state.request.read().clone() };
-    let cfg = download::Config::default();
-    let downloader = download::Downloader::new(client, cfg);
-    let paths: Vec<PathBuf> = save_paths.into_iter().map(PathBuf::from).collect();
-    match downloader.download_many(&urls, &paths, Some(app.clone()), None).await {
-        Ok(_) => Ok(true),
-        Err(e) => {
-            let _ = app.emit("download:failed", serde_json::json!({"message": e.to_string()}));
-            Err(e.to_string())
-        }
-    }
-}
-
 // ---------- task (最小下载批任务 + 取消) ----------
 #[tauri::command]
 pub fn task_all(state: State<AppState>) -> Result<Vec<crate::task::Task>, String> {
