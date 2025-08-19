@@ -13,12 +13,14 @@ use super::{Progress, Task, TaskStatus};
 
 pub struct TaskManager {
     pub tasks: Arc<RwLock<HashMap<String, Task>>>,
+    pub download_concurrency: usize,
 }
 
 impl Default for TaskManager {
     fn default() -> Self {
         Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
+            download_concurrency: 8,
         }
     }
 }
@@ -49,14 +51,6 @@ impl TaskManager {
         }
     }
 
-    pub fn set_progress(&self, task_id: &str, current: i32, total: i32) {
-        let mut w = self.tasks.write();
-        if let Some(t) = w.get_mut(task_id) {
-            t.progress.current = current;
-            t.progress.total = total;
-            t.updated_at = now_str();
-        }
-    }
 
     pub fn set_name_and_path(&self, task_id: &str, name: &str, save_path: &str) {
         let mut w = self.tasks.write();
@@ -72,18 +66,6 @@ impl TaskManager {
         if let Some(t) = w.get_mut(task_id) {
             t.name = name.to_string();
             t.updated_at = now_str();
-        }
-    }
-
-    pub fn set_completed(&self, task_id: &str, save_path: Option<&str>) {
-        let mut w = self.tasks.write();
-        if let Some(t) = w.get_mut(task_id) {
-            t.status = TaskStatus::Completed;
-            if let Some(p) = save_path {
-                t.save_path = p.to_string();
-            }
-            t.complete_time = now_str();
-            t.updated_at = t.complete_time.clone();
         }
     }
 
@@ -136,8 +118,8 @@ impl TaskManager {
         token_opt: Option<CancellationToken>,
         default_headers: Option<HeaderMap>,
     ) -> CancellationToken {
-        use futures_util::stream::FuturesUnordered;
         use futures_util::StreamExt;
+        use futures_util::stream;
         let downloader =
             Downloader::new_with_headers(client, DownloadConfig::default(), default_headers);
         let token = token_opt.unwrap_or_else(CancellationToken::new);
@@ -152,16 +134,21 @@ impl TaskManager {
         }
         let ct = token.clone();
         let tm = self.tasks.clone();
+        let concurrency = self.download_concurrency;
         tauri::async_runtime::spawn(async move {
-            let mut futs = FuturesUnordered::new();
-            for (u, p) in urls.into_iter().zip(paths.into_iter()) {
+            let mut stream = stream::iter(urls.into_iter().zip(paths.into_iter()).map(|(u, p)| {
                 let d = downloader.clone();
                 let app_handle = app.clone();
                 let tid = task_id.clone();
                 let cancel = ct.clone();
-                futs.push(async move {
+                async move {
                     if cancel.is_cancelled() {
-                        return Err(anyhow::anyhow!("cancelled"));
+                        let res: anyhow::Result<()> = Err(anyhow::anyhow!("cancelled"));
+                        let _ = app_handle.emit(
+                            "download:progress",
+                            serde_json::json!({"taskId": tid, "url": u, "ok": false}),
+                        );
+                        return res;
                     }
                     let res = d.download_file(&u, &p).await;
                     let _ = app_handle.emit(
@@ -169,10 +156,12 @@ impl TaskManager {
                         serde_json::json!({"taskId": tid, "url": u, "ok": res.is_ok()}),
                     );
                     res
-                });
-            }
+                }
+            }))
+            .buffer_unordered(concurrency);
+
             let mut current: i32 = 0;
-            while let Some(res) = futs.next().await {
+            while let Some(res) = stream.next().await {
                 current += 1;
                 let mut w = tm.write();
                 if let Some(t) = w.get_mut(&task_id) {

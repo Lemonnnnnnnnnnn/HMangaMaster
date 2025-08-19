@@ -36,12 +36,6 @@ impl Client {
 
     pub async fn head(&self, url: &str) -> anyhow::Result<reqwest::Response> { Ok(self.http.head(url).send().await?) }
 
-    pub async fn get_with_headers(&self, url: &str, headers: &HeaderMap) -> anyhow::Result<reqwest::Response> {
-        let mut req = self.http.get(url);
-        for (k, v) in headers.iter() { req = req.header(k, v); }
-        Ok(req.send().await?)
-    }
-
     // 带并发限制的 GET
     pub async fn get_rate_limited(&self, url: &str) -> anyhow::Result<reqwest::Response> {
         let _permit = self.limiter.clone().acquire_owned().await.map_err(|_| anyhow::anyhow!("semaphore closed"))?;
@@ -61,8 +55,6 @@ impl Client {
         Self { http: self.http.clone(), default_headers: self.default_headers.clone(), limiter: Arc::new(Semaphore::new(permits)) }
     }
 
-    // 直接修改当前实例的并发上限
-    pub fn set_limit(&mut self, permits: usize) { self.limiter = Arc::new(Semaphore::new(permits)); }
 }
 
 

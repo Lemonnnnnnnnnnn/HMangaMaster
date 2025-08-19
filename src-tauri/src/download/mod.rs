@@ -1,15 +1,13 @@
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use tokio::io::AsyncWriteExt;
-use tauri::Emitter;
-use tokio_util::sync::CancellationToken;
 
 use crate::request::Client as RequestClient;
 use reqwest::header::HeaderMap;
 use reqwest::Url;
 
 #[derive(Clone)]
-pub struct Config { pub retry_count: usize, pub retry_delay_secs: u64, pub concurrency: usize }
-impl Default for Config { fn default() -> Self { Self { retry_count: 3, retry_delay_secs: 2, concurrency: 8 } } }
+pub struct Config { pub retry_count: usize, pub retry_delay_secs: u64 }
+impl Default for Config { fn default() -> Self { Self { retry_count: 3, retry_delay_secs: 2 } } }
 
 #[derive(Clone)]
 pub struct Downloader { req: RequestClient, config: Config, default_headers: Option<HeaderMap> }
@@ -17,8 +15,6 @@ pub struct Downloader { req: RequestClient, config: Config, default_headers: Opt
 impl Downloader {
     pub fn new(req: RequestClient, config: Config) -> Self { Self { req, config, default_headers: None } }
     pub fn new_with_headers(req: RequestClient, config: Config, headers: Option<HeaderMap>) -> Self { Self { req, config, default_headers: headers } }
-    // 允许外部覆写请求层的并发上限（例如站点特殊需求）
-    pub fn set_request_limit(&mut self, permits: usize) { self.req.set_limit(permits); }
 
     pub async fn download_file(&self, url: &str, file_path: &Path) -> anyhow::Result<()> {
         if let Some(parent) = file_path.parent() { tokio::fs::create_dir_all(parent).await?; }
