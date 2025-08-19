@@ -1,6 +1,8 @@
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::request::Client;
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE};
+use std::sync::{Arc};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct EhentaiParser {
     concurrency: usize,
@@ -169,7 +171,7 @@ impl SiteParser for EhentaiParser {
                 anyhow::bail!("未解析到任何大图链接");
             }
 
-            Ok(ParsedGallery { title, image_urls })
+            Ok(ParsedGallery { title, image_urls, download_headers: None })
         })
     }
     fn parse_with_progress<'a>(
@@ -181,11 +183,11 @@ impl SiteParser for EhentaiParser {
         Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>,
     > {
         Box::pin(async move {
-            // 覆写请求并发限制为 5
+            // 覆写请求并发限制
             let client = client.with_limit(self.concurrency);
             let mut headers = HeaderMap::new();
             headers.insert(COOKIE, HeaderValue::from_static("nw=1"));
-            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:album"); }
+            if let Some(r) = reporter.as_ref() { r.set_task_name("EHentai - 正在获取专辑信息"); }
             let first = client.get_with_headers_rate_limited(url, &headers).await?;
             if !first.status().is_success() {
                 anyhow::bail!("状态码异常: {}", first.status());
@@ -215,21 +217,20 @@ impl SiteParser for EhentaiParser {
             };
             page_urls.sort();
             page_urls.dedup();
-            if let Some(r) = reporter.as_ref() {
-                r.set_stage("parsing:pages");
-            }
+            if let Some(r) = reporter.as_ref() { r.set_task_name(&format!("EHentai - 正在获取专辑页面 (0/{}页)", page_urls.len())); r.set_total(page_urls.len()); }
 
             // 并发收集小图页
             let mut thumb_pages: Vec<String> = {
                 use futures_util::stream::{self, StreamExt};
-                if let Some(r) = reporter.as_ref() {
-                    r.set_total(page_urls.len());
-                }
+                let pages_done = Arc::new(AtomicUsize::new(0));
                 let results: Vec<Vec<String>> = stream::iter(page_urls.clone())
                     .map(|p| {
                         let headers_cloned = headers.clone();
                         let client_cloned = client.clone();
                         let rep = reporter.clone();
+                        let done = pages_done.clone();
+                        {
+                        let value = page_urls.clone();
                         async move {
                             let mut local: Vec<String> = vec![];
                             if let Ok(resp) = client_cloned
@@ -249,8 +250,13 @@ impl SiteParser for EhentaiParser {
                                     }
                                 }
                             }
-                            if let Some(r) = rep.as_ref() { r.inc(1); }
+                            if let Some(r) = rep.as_ref() {
+                                let cur = done.fetch_add(1, Ordering::Relaxed) + 1;
+                                r.inc(1);
+                                r.set_task_name(&format!("EHentai - 正在获取专辑页面 ({} / {}页)", cur, value.len()));
+                            }
                             local
+                        }
                         }
                     })
                     .buffer_unordered(8)
@@ -263,19 +269,19 @@ impl SiteParser for EhentaiParser {
             if thumb_pages.is_empty() {
                 anyhow::bail!("未找到任何图片链接");
             }
-            if let Some(r) = reporter.as_ref() {
-                r.set_stage("parsing:images");
-                r.set_total(thumb_pages.len());
-            }
+            if let Some(r) = reporter.as_ref() { r.set_task_name(&format!("EHentai - 正在解析图片链接 (0/{}张)", thumb_pages.len())); r.set_total(thumb_pages.len()); }
 
             // 并发解析最终大图
             let mut image_urls: Vec<String> = {
                 use futures_util::stream::{self, StreamExt};
+                let imgs_done = Arc::new(AtomicUsize::new(0));
+                let total_imgs = thumb_pages.len();
                 let results: Vec<Option<String>> = stream::iter(thumb_pages.clone())
                     .map(|tp| {
                         let headers_cloned = headers.clone();
                         let client_cloned = client.clone();
                         let rep = reporter.clone();
+                        let done = imgs_done.clone();
                         async move {
                             let resp = client_cloned
                                 .get_with_headers_rate_limited(&tp, &headers_cloned)
@@ -317,7 +323,9 @@ impl SiteParser for EhentaiParser {
                                 .and_then(|img2| img2.value().attr("src"))
                                 .map(|s| s.to_string());
                             if let Some(r) = rep.as_ref() {
+                                let cur = done.fetch_add(1, Ordering::Relaxed) + 1;
                                 r.inc(1);
+                                r.set_task_name(&format!("EHentai - 正在解析图片链接 ({} / {}张)", cur, total_imgs));
                             }
                             final_src
                         }
@@ -332,9 +340,15 @@ impl SiteParser for EhentaiParser {
             if image_urls.is_empty() {
                 anyhow::bail!("未解析到任何大图链接");
             }
-            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:done"); }
+            if let Some(r) = reporter.as_ref() {
+                let name = match title.as_ref() {
+                    Some(t) if !t.is_empty() => format!("EHentai - 解析完成，准备下载: {}", t),
+                    _ => "EHentai - 解析完成，准备下载".to_string(),
+                };
+                r.set_task_name(&name);
+            }
 
-            Ok(ParsedGallery { title, image_urls })
+            Ok(ParsedGallery { title, image_urls, download_headers: None })
         })
     }
 }

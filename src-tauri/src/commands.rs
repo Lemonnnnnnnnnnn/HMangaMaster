@@ -2,14 +2,13 @@ use tauri::State;
 use tauri::Emitter;
 
 use crate::app::AppState;
-// use crate::config::Manager as ConfigManager;
 use crate::logger;
 use crate::library;
 use crate::history;
 use crate::download;
 use crate::crawler;
-// use tokio_util::sync::CancellationToken;
-// use crate::task::TaskManager;
+
+use std::sync::Arc;
 
 // ---------- logger ----------
 #[tauri::command]
@@ -212,94 +211,7 @@ pub async fn task_start_crawl(state: State<'_, AppState>, app: tauri::AppHandle,
     // 为任务创建取消令牌并注册，解析与下载公用
     let cancel_token = tokio_util::sync::CancellationToken::new();
     state.cancels.write().insert(task_id.clone(), cancel_token.clone());
-    // 解析阶段进度上报适配：仅设置 stage/total，不改变下载进度条
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use parking_lot::RwLock as PLRwLock;
-    struct TaskParseReporter {
-        id: String,
-        app: tauri::AppHandle,
-        total: AtomicUsize,
-        current: AtomicUsize,
-        task_mgr: Arc<PLRwLock<crate::task::TaskManager>>,
-        stage: PLRwLock<String>,
-        prefix: String,
-    }
-    impl crawler::ProgressReporter for TaskParseReporter {
-        fn set_total(&self, total: usize) {
-            self.total.store(total, Ordering::Relaxed);
-            self.current.store(0, Ordering::Relaxed);
-            let _ = self.app.emit("download:progress", serde_json::json!({
-                "taskId": self.id,
-                "stage": "parsingTotal",
-                "total": total
-            }));
-            // 根据当前阶段更新任务名称
-            let stage = self.stage.read().clone();
-            if stage == "parsing:pages" {
-                let name = format!("{}正在获取专辑页面 (0/{}页)", self.prefix, total);
-                self.task_mgr.read().set_name(&self.id, &name);
-            } else if stage == "parsing:images" {
-                let name = format!("{}正在解析图片链接 (0/{}张)", self.prefix, total);
-                self.task_mgr.read().set_name(&self.id, &name);
-            }
-        }
-        fn inc(&self, delta: usize) {
-            let new_cur = self.current.fetch_add(delta, Ordering::Relaxed) + delta;
-            let total = self.total.load(Ordering::Relaxed);
-            let _ = self.app.emit("download:progress", serde_json::json!({
-                "taskId": self.id,
-                "stage": "parsingProgress",
-                "current": new_cur,
-                "total": total
-            }));
-            // 在递增时根据阶段刷新任务名称
-            let stage = self.stage.read().clone();
-            if stage == "parsing:images" && total > 0 {
-                let name = format!("{}正在解析图片链接 ({} / {}张)", self.prefix, new_cur, total);
-                self.task_mgr.read().set_name(&self.id, &name);
-            } else if stage == "parsing:pages" && total > 0 {
-                let name = format!("{}正在获取专辑页面 ({} / {}页)", self.prefix, new_cur, total);
-                self.task_mgr.read().set_name(&self.id, &name);
-            }
-        }
-        fn set_stage(&self, stage: &str) {
-            {
-                let mut w = self.stage.write();
-                *w = stage.to_string();
-            }
-            let _ = self.app.emit("download:progress", serde_json::json!({"taskId": self.id, "stage": stage}));
-            // 特殊规则：以 taskName: 前缀直接设置任务名称
-            if let Some(rest) = stage.strip_prefix("taskName:") {
-                self.task_mgr.read().set_name(&self.id, rest);
-                return;
-            }
-            // 常规阶段的任务名称
-            match stage {
-                "parsing:album" => {
-                    let name = format!("{}正在获取专辑信息", self.prefix);
-                    self.task_mgr.read().set_name(&self.id, &name);
-                }
-                "parsing:pages" => {
-                    let total = self.total.load(Ordering::Relaxed);
-                    let name = if total > 0 { format!("{}正在获取专辑页面 (0/{}页)", self.prefix, total) } else { format!("{}正在获取专辑页面", self.prefix) };
-                    self.task_mgr.read().set_name(&self.id, &name);
-                }
-                "parsing:images" => {
-                    let total = self.total.load(Ordering::Relaxed);
-                    let name = if total > 0 { format!("{}正在解析图片链接 (0/{}张)", self.prefix, total) } else { format!("{}正在解析图片链接", self.prefix) };
-                    self.task_mgr.read().set_name(&self.id, &name);
-                }
-                "parsing:done" => {
-                    let name = format!("{}解析完成，准备下载", self.prefix);
-                    self.task_mgr.read().set_name(&self.id, &name);
-                }
-                _ => {}
-            }
-        }
-    }
-    let prefix = if url.contains("e-hentai.org") || url.contains("exhentai.org") { "EHentai - ".to_string() } else { String::new() };
-    let reporter = Arc::new(TaskParseReporter { id: task_id.clone(), app: app.clone(), total: AtomicUsize::new(0), current: AtomicUsize::new(0), task_mgr: state.task_manager.clone(), stage: PLRwLock::new(String::new()), prefix });
+    let reporter = Arc::new(crate::crawler::reporter::TaskParseReporter::new(task_id.clone(), app.clone(), state.task_manager.clone()));
     // 解析阶段支持取消
     let parsed = match {
         let fut = crawler::parse_gallery_auto(&client, &url, Some(reporter));
@@ -341,37 +253,16 @@ pub async fn task_start_crawl(state: State<'_, AppState>, app: tauri::AppHandle,
     };
     if parsed.image_urls.is_empty() { return Err("未解析到图片".into()); }
     // 生成保存路径
-    let safe_name = sanitize_filename::sanitize(parsed.title.unwrap_or_else(|| "gallery".to_string()));
+    let safe_name = sanitize_filename::sanitize(parsed.title.clone().unwrap_or_else(|| "gallery".to_string()));
     let base_path = std::path::PathBuf::from(output_dir).join(&safe_name);
-    let mut urls: Vec<String> = vec![];
-    let mut paths: Vec<std::path::PathBuf> = vec![];
-    for (idx, u) in parsed.image_urls.iter().enumerate() {
-        urls.push(u.clone());
-        let ext = infer_ext_from_url(u).unwrap_or("jpg");
-        let filename = format!("{:04}.{}", idx + 1, ext);
-        paths.push(base_path.join(&filename));
-    }
+    let (urls, paths) = download::build_download_plan(&parsed.image_urls, &base_path);
     // 解析结束后，设置任务可见的名称与保存目录，并更新总数为图片数量；切换为 downloading
     state.task_manager.read().set_name_and_path(&task_id, &safe_name, base_path.to_string_lossy().as_ref());
     state.task_manager.read().set_status_downloading(&task_id, urls.len() as i32);
-    // 启动批量下载任务（按站点注入必要请求头，例如 Hitomi 需要 Referer）
-    let headers_opt = if url.contains("hitomi.la") {
-        let mut h = reqwest::header::HeaderMap::new();
-        h.insert(reqwest::header::REFERER, reqwest::header::HeaderValue::from_static("https://hitomi.la/"));
-        Some(h)
-    } else { None };
-    let token = state.task_manager.read().start_batch(app.clone(), task_id.clone(), urls, paths, client, Some(cancel_token.clone()), headers_opt);
+    // 启动批量下载任务（站点可通过 ParsedGallery.download_headers 提供默认请求头）
+    let token = state.task_manager.read().start_batch(app.clone(), task_id.clone(), urls, paths, client, Some(cancel_token.clone()), parsed.download_headers);
     state.cancels.write().insert(task_id.clone(), token);
     Ok(task_id)
-}
-
-fn infer_ext_from_url(url: &str) -> Option<&'static str> {
-    let path = reqwest::Url::parse(url).ok()?.path().to_ascii_lowercase();
-    if path.ends_with(".webp") { return Some("webp"); }
-    if path.ends_with(".jpg") || path.ends_with(".jpeg") { return Some("jpg"); }
-    if path.ends_with(".png") { return Some("png"); }
-    if path.ends_with(".gif") { return Some("gif"); }
-    None
 }
 
 #[tauri::command]

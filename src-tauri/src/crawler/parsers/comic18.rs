@@ -32,7 +32,7 @@ impl SiteParser for Comic18Parser {
             image_urls.dedup();
             if image_urls.is_empty() { anyhow::bail!("未找到任何图片"); }
 
-            Ok(ParsedGallery { title, image_urls })
+            Ok(ParsedGallery { title, image_urls, download_headers: None })
         })
     }
     fn parse_with_progress<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
@@ -50,7 +50,7 @@ impl SiteParser for Comic18Parser {
             let sel_img = scraper::Selector::parse(".scramble-page > img").unwrap();
             let images: Vec<scraper::element_ref::ElementRef> = doc.select(&sel_img).collect();
             if images.is_empty() { anyhow::bail!("未找到任何图片"); }
-            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:images"); r.set_total(images.len()); }
+            if let Some(r) = reporter.as_ref() { r.set_task_name(&format!("18Comic - 正在解析图片链接 (0/{}张)", images.len())); r.set_total(images.len()); }
 
             let mut image_urls: Vec<String> = Vec::with_capacity(images.len());
             for img in images {
@@ -62,7 +62,7 @@ impl SiteParser for Comic18Parser {
             image_urls.dedup();
             if image_urls.is_empty() { anyhow::bail!("未找到任何图片"); }
 
-            Ok(ParsedGallery { title, image_urls })
+            Ok(ParsedGallery { title, image_urls, download_headers: None })
         })
     }
 }

@@ -1,23 +1,31 @@
-use std::collections::HashMap;
 use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
 use tauri::{AppHandle, Emitter};
+use tokio_util::sync::CancellationToken;
 
-use crate::download::{Downloader, Config as DownloadConfig};
-use crate::request::Client as RequestClient;
+use crate::download::{Config as DownloadConfig, Downloader};
 use crate::history;
+use crate::request::Client as RequestClient;
 use reqwest::header::HeaderMap;
 
-use super::{Task, TaskStatus, Progress};
+use super::{Progress, Task, TaskStatus};
 
 pub struct TaskManager {
     pub tasks: Arc<RwLock<HashMap<String, Task>>>,
 }
 
-impl Default for TaskManager { fn default() -> Self { Self { tasks: Arc::new(RwLock::new(HashMap::new())) } } }
+impl Default for TaskManager {
+    fn default() -> Self {
+        Self {
+            tasks: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+}
 
-fn now_str() -> String { chrono::Utc::now().to_rfc3339() }
+fn now_str() -> String {
+    chrono::Utc::now().to_rfc3339()
+}
 
 impl TaskManager {
     pub fn create_or_start(&self, task_id: &str, url: &str, total: i32) {
@@ -71,7 +79,9 @@ impl TaskManager {
         let mut w = self.tasks.write();
         if let Some(t) = w.get_mut(task_id) {
             t.status = TaskStatus::Completed;
-            if let Some(p) = save_path { t.save_path = p.to_string(); }
+            if let Some(p) = save_path {
+                t.save_path = p.to_string();
+            }
             t.complete_time = now_str();
             t.updated_at = t.complete_time.clone();
         }
@@ -96,20 +106,22 @@ impl TaskManager {
         }
     }
 
-    pub fn all(&self) -> Vec<Task> { self.tasks.read().values().cloned().collect() }
+    pub fn all(&self) -> Vec<Task> {
+        self.tasks.read().values().cloned().collect()
+    }
     pub fn active(&self) -> Vec<Task> {
-        self
-            .tasks
+        self.tasks
             .read()
             .values()
             .filter(|t| t.status == TaskStatus::Running || t.status == TaskStatus::Parsing)
             .cloned()
             .collect()
     }
-    pub fn by_id(&self, task_id: &str) -> Option<Task> { self.tasks.read().get(task_id).cloned() }
+    pub fn by_id(&self, task_id: &str) -> Option<Task> {
+        self.tasks.read().get(task_id).cloned()
+    }
     pub fn clear_non_active(&self) {
-        self
-            .tasks
+        self.tasks
             .write()
             .retain(|_, t| t.status == TaskStatus::Running || t.status == TaskStatus::Parsing)
     }
@@ -126,7 +138,8 @@ impl TaskManager {
     ) -> CancellationToken {
         use futures_util::stream::FuturesUnordered;
         use futures_util::StreamExt;
-        let downloader = Downloader::new_with_headers(client, DownloadConfig::default(), default_headers);
+        let downloader =
+            Downloader::new_with_headers(client, DownloadConfig::default(), default_headers);
         let token = token_opt.unwrap_or_else(CancellationToken::new);
         let total = urls.len() as i32;
         self.create_or_start(&task_id, "batch", total);
@@ -140,9 +153,14 @@ impl TaskManager {
                 let tid = task_id.clone();
                 let cancel = ct.clone();
                 futs.push(async move {
-                    if cancel.is_cancelled() { return Err(anyhow::anyhow!("cancelled")); }
+                    if cancel.is_cancelled() {
+                        return Err(anyhow::anyhow!("cancelled"));
+                    }
                     let res = d.download_file(&u, &p).await;
-                    let _ = app_handle.emit("download:progress", serde_json::json!({"taskId": tid, "url": u, "ok": res.is_ok()}));
+                    let _ = app_handle.emit(
+                        "download:progress",
+                        serde_json::json!({"taskId": tid, "url": u, "ok": res.is_ok()}),
+                    );
                     res
                 });
             }
@@ -157,7 +175,9 @@ impl TaskManager {
                 }
                 if res.is_err() {
                     if let Some(t) = w.get_mut(&task_id) {
-                        if t.error.is_empty() { t.error = format!("{:?}", res.err()); }
+                        if t.error.is_empty() {
+                            t.error = format!("{:?}", res.err());
+                        }
                     }
                 }
             }
@@ -195,7 +215,10 @@ impl TaskManager {
                         updated_at: t.updated_at.clone(),
                         error: t.error.clone(),
                         name: t.name.clone(),
-                        progress: history::Progress { current: t.progress.current, total: t.progress.total },
+                        progress: history::Progress {
+                            current: t.progress.current,
+                            total: t.progress.total,
+                        },
                     };
                     drop(w);
                     let mut hm = history::Manager::default();
@@ -209,13 +232,23 @@ impl TaskManager {
             }
             // 按状态派发事件
             match status_str.as_str() {
-                "completed" => { let _ = app.emit("download:completed", serde_json::json!({"taskId": task_id})); }
-                "cancelled" => { let _ = app.emit("download:cancelled", serde_json::json!({"taskId": task_id})); }
-                _ => { let _ = app.emit("download:failed", serde_json::json!({"taskId": task_id, "message": error_msg})); }
+                "completed" => {
+                    let _ = app.emit(
+                        "download:completed",
+                        serde_json::json!({"taskId": task_id , "taskName": tm.read().get(&task_id).unwrap().name}),
+                    );
+                }
+                "cancelled" => {
+                    let _ = app.emit(
+                        "download:cancelled",
+                        serde_json::json!({"taskId": task_id , "taskName": tm.read().get(&task_id).unwrap().name}),
+                    );
+                }
+                _ => {
+                    let _ = app.emit("download:failed", serde_json::json!({"taskId": task_id, "taskName": tm.read().get(&task_id).unwrap().name, "message": error_msg}));
+                }
             }
         });
         token
     }
 }
-
-

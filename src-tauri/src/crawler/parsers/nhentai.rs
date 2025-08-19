@@ -36,7 +36,7 @@ impl SiteParser for NhentaiParser {
                 image_urls.push(convert_nhentai_thumb(&t, use_webp));
             }
 
-            Ok(ParsedGallery { title, image_urls })
+            Ok(ParsedGallery { title, image_urls, download_headers: None })
         })
     }
     fn parse_with_progress<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
@@ -57,7 +57,7 @@ impl SiteParser for NhentaiParser {
                 (title, thumbs)
             };
             if thumbs.is_empty() { anyhow::bail!("未找到任何图片"); }
-            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:images"); r.set_total(thumbs.len()); }
+            if let Some(r) = reporter.as_ref() { r.set_task_name(&format!("NHentai - 正在解析图片链接 (0/{}张)", thumbs.len())); r.set_total(thumbs.len()); }
 
             let first_webp = convert_nhentai_thumb(&thumbs[0], true);
             let webp_ok = client.head(&first_webp).await.map(|r| r.status().is_success()).unwrap_or(false);
@@ -69,7 +69,7 @@ impl SiteParser for NhentaiParser {
                 if let Some(r) = reporter.as_ref() { r.inc(1); }
             }
 
-            Ok(ParsedGallery { title, image_urls })
+            Ok(ParsedGallery { title, image_urls, download_headers: None })
         })
     }
 }

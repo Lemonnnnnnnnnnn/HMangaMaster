@@ -5,6 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::request::Client as RequestClient;
 use reqwest::header::HeaderMap;
+use reqwest::Url;
 
 #[derive(Clone)]
 pub struct Config { pub retry_count: usize, pub retry_delay_secs: u64, pub concurrency: usize }
@@ -44,38 +45,28 @@ impl Downloader {
         Err(last_err.unwrap_or_else(|| anyhow::anyhow!("download failed")))
     }
 
-    pub async fn download_many(&self, urls: &[String], paths: &[PathBuf], app: Option<tauri::AppHandle>, task_id: Option<String>) -> anyhow::Result<()> {
-        self.download_many_with_token(urls, paths, app, task_id, None).await
-    }
+}
 
-    pub async fn download_many_with_token(&self, urls: &[String], paths: &[PathBuf], app: Option<tauri::AppHandle>, task_id: Option<String>, cancel: Option<CancellationToken>) -> anyhow::Result<()> {
-        if urls.len() != paths.len() { return Err(anyhow::anyhow!("urls 与 paths 数量不一致")); }
-        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(self.config.concurrency));
-        let mut tasks = vec![];
-        for (idx, (u, p)) in urls.iter().zip(paths.iter()).enumerate() {
-            let permit = semaphore.clone().acquire_owned().await?;
-            let this = self.clone();
-            let app_handle = app.clone();
-            let u = u.clone();
-            let p = p.clone();
-            let tid = task_id.clone();
-            let cancel_token = cancel.clone();
-            let fut = tokio::spawn(async move {
-                let _permit = permit;
-                if let Some(ct) = cancel_token.as_ref() { if ct.is_cancelled() { return Err(anyhow::anyhow!("cancelled")); } }
-                let res = this.download_file(&u, &p).await;
-                if let Some(app) = app_handle {
-                    let _ = app.emit("download:progress", serde_json::json!({"taskId": tid, "index": idx, "url": u, "ok": res.is_ok()}));
-                }
-                res
-            });
-            tasks.push(fut);
-        }
-        let results = futures_util::future::join_all(tasks).await;
-        for r in results { r??; }
-        if let Some(app) = app { let _ = app.emit("download:completed", serde_json::json!({"taskId": task_id})); }
-        Ok(())
+// ---- helpers ----
+pub fn build_download_plan(image_urls: &[String], base_path: &std::path::Path) -> (Vec<String>, Vec<std::path::PathBuf>) {
+    let mut urls: Vec<String> = Vec::with_capacity(image_urls.len());
+    let mut paths: Vec<std::path::PathBuf> = Vec::with_capacity(image_urls.len());
+    for (idx, u) in image_urls.iter().enumerate() {
+        urls.push(u.clone());
+        let ext = infer_ext_from_url(u).unwrap_or("jpg");
+        let filename = format!("{:04}.{}", idx + 1, ext);
+        paths.push(base_path.join(&filename));
     }
+    (urls, paths)
+}
+
+pub fn infer_ext_from_url(url: &str) -> Option<&'static str> {
+    let path = Url::parse(url).ok()?.path().to_ascii_lowercase();
+    if path.ends_with(".webp") { return Some("webp"); }
+    if path.ends_with(".jpg") || path.ends_with(".jpeg") { return Some("jpg"); }
+    if path.ends_with(".png") { return Some("png"); }
+    if path.ends_with(".gif") { return Some("gif"); }
+    None
 }
 
 

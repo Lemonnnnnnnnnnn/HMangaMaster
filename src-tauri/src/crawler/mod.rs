@@ -1,9 +1,11 @@
 use serde::Serialize;
 
 use crate::request::Client;
+use reqwest::header::HeaderMap;
 
 pub mod factory;
 pub mod parsers;
+pub mod reporter;
 
 use std::sync::Arc;
 
@@ -11,13 +13,17 @@ use std::sync::Arc;
 pub struct ParsedGallery {
 	pub title: Option<String>,
 	pub image_urls: Vec<String>,
+	// 站点可选提供下载时需要附带的默认请求头（例如 Referer）。
+	// 仅用于后端下载，不需要序列化给前端。
+	#[serde(skip)]
+	pub download_headers: Option<HeaderMap>,
 }
 
-// 解析阶段进度上报
+// 解析阶段进度上报（取消 stage 概念，允许解析器直接设置任务名）
 pub trait ProgressReporter: Send + Sync {
     fn set_total(&self, _total: usize) {}
     fn inc(&self, _delta: usize) {}
-    fn set_stage(&self, _stage: &str) {}
+    fn set_task_name(&self, _name: &str) {}
 }
 
 // 解析器接口
@@ -81,7 +87,7 @@ impl SiteParser for GenericParser {
 					.filter(|s| !s.is_empty());
 				(title, imgs)
 			};
-			Ok(ParsedGallery { title, image_urls: imgs })
+			Ok(ParsedGallery { title, image_urls: imgs, download_headers: None })
 		})
 	}
 }

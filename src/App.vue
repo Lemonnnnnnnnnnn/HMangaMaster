@@ -9,7 +9,7 @@ import 'vue-sonner/style.css'
 onMounted(() => {
   listen('download:completed', (e) => {
     const data: any = e.payload;
-    toast.success('下载完成！', { description: typeof data === 'string' ? data : (data?.taskId || ''), duration: 5000 });
+    toast.success('下载完成！', { description: typeof data === 'string' ? data : (data?.taskName || ''), duration: 5000 });
   });
   listen('download:failed', (e) => {
     const data: any = e.payload;
@@ -17,7 +17,7 @@ onMounted(() => {
   });
   listen('download:cancelled', (e) => {
     const data: any = e.payload;
-    toast.warning('下载已取消', { description: data?.taskId || '', duration: 3000 });
+    toast.warning('下载已取消', { description: data?.taskName || '', duration: 3000 });
   });
 });
 

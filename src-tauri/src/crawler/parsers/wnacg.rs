@@ -99,7 +99,7 @@ impl SiteParser for WnacgParser {
             image_urls.dedup();
             if image_urls.is_empty() { anyhow::bail!("未解析到任何图片"); }
 
-            Ok(ParsedGallery { title: title_opt, image_urls })
+            Ok(ParsedGallery { title: title_opt, image_urls, download_headers: None })
         })
     }
     fn parse_with_progress<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
@@ -125,7 +125,7 @@ impl SiteParser for WnacgParser {
             };
             page_urls.sort();
             page_urls.dedup();
-            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:pages"); r.set_total(page_urls.len()); }
+            if let Some(r) = reporter.as_ref() { r.set_task_name(&format!("Wnacg - 正在获取专辑页面 (0/{}页)", page_urls.len())); r.set_total(page_urls.len()); }
 
             // 并发收集漫画详情页
             let mut manga_pages: Vec<String> = {
@@ -158,7 +158,7 @@ impl SiteParser for WnacgParser {
             manga_pages.sort();
             manga_pages.dedup();
             if manga_pages.is_empty() { anyhow::bail!("未找到任何漫画页面"); }
-            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:images"); r.set_total(manga_pages.len()); }
+            if let Some(r) = reporter.as_ref() { r.set_task_name(&format!("Wnacg - 正在解析图片链接 (0/{}张)", manga_pages.len())); r.set_total(manga_pages.len()); }
 
             // 并发解析最终图片
             let mut image_urls: Vec<String> = {
@@ -194,7 +194,7 @@ impl SiteParser for WnacgParser {
             image_urls.dedup();
             if image_urls.is_empty() { anyhow::bail!("未解析到任何图片"); }
 
-            Ok(ParsedGallery { title: title_opt, image_urls })
+            Ok(ParsedGallery { title: title_opt, image_urls, download_headers: None })
         })
     }
 }

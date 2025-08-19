@@ -1,5 +1,6 @@
 use crate::crawler::{ParsedGallery, SiteParser, ProgressReporter};
 use crate::request::Client;
+use reqwest::header::{HeaderMap, HeaderValue, REFERER};
 
 pub struct HitomiParser;
 
@@ -33,7 +34,11 @@ impl SiteParser for HitomiParser {
                 image_urls.push(url);
             }
             if image_urls.is_empty() { anyhow::bail!("没有生成任何图片URL"); }
-            Ok(ParsedGallery { title: Some(title), image_urls })
+            Ok(ParsedGallery { title: Some(title), image_urls, download_headers: {
+                let mut h = HeaderMap::new();
+                h.insert(REFERER, HeaderValue::from_static("https://hitomi.la/"));
+                Some(h)
+            } })
         })
     }
     fn parse_with_progress<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
@@ -45,7 +50,7 @@ impl SiteParser for HitomiParser {
             let gi_text = gi_resp.text().await?;
             let (title, files) = parse_galleryinfo(&gi_text)?;
 
-            if let Some(r) = reporter.as_ref() { r.set_stage("parsing:images"); r.set_total(files.len()); }
+            if let Some(r) = reporter.as_ref() { r.set_task_name(&format!("Hitomi - 正在解析图片链接 (0/{}张)", files.len())); r.set_total(files.len()); }
 
             let gg_url = "https://ltn.gold-usergeneratedcontent.net/gg.js";
             let gg_resp = client.get(gg_url).await?;
@@ -61,7 +66,11 @@ impl SiteParser for HitomiParser {
                 if let Some(r) = reporter.as_ref() { r.inc(1); }
             }
             if image_urls.is_empty() { anyhow::bail!("没有生成任何图片URL"); }
-            Ok(ParsedGallery { title: Some(title), image_urls })
+            Ok(ParsedGallery { title: Some(title), image_urls, download_headers: {
+                let mut h = HeaderMap::new();
+                h.insert(REFERER, HeaderValue::from_static("https://hitomi.la/"));
+                Some(h)
+            } })
         })
     }
 }

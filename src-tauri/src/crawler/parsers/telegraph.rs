@@ -40,7 +40,7 @@ impl SiteParser for TelegraphParser {
             images.dedup();
 
             if images.is_empty() { return Err(anyhow::anyhow!("未找到任何图片")); }
-            Ok(ParsedGallery { title, image_urls: images })
+            Ok(ParsedGallery { title, image_urls: images, download_headers: None })
         })
     }
 }
