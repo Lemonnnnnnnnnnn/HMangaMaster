@@ -37,7 +37,7 @@
                         </div>
                     </div>
                 </td>
-                <td v-if="mode === 'history'">{{ task.status === 'completed' ? formatTime(task.completeTime) : '-' }}</td>
+                <td v-if="mode === 'history'">{{ task.status === 'completed' ? formatTime(task.completeTime ?? '') : '-' }}</td>
                 <td v-if="mode === 'history'" class="max-w-64">
                     <span v-if="task.status === 'failed' && task.error"
                           :title="task.error"

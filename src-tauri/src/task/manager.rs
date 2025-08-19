@@ -142,7 +142,14 @@ impl TaskManager {
             Downloader::new_with_headers(client, DownloadConfig::default(), default_headers);
         let token = token_opt.unwrap_or_else(CancellationToken::new);
         let total = urls.len() as i32;
-        self.create_or_start(&task_id, "batch", total);
+        // 不要在这里重置任务为 parsing，保持调用方已设置的状态（通常为 downloading）
+        {
+            let mut w = self.tasks.write();
+            let t = w.entry(task_id.clone()).or_default();
+            t.progress.total = total;
+            t.status = TaskStatus::Running;
+            t.updated_at = now_str();
+        }
         let ct = token.clone();
         let tm = self.tasks.clone();
         tauri::async_runtime::spawn(async move {
