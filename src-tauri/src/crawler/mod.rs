@@ -26,7 +26,7 @@ pub trait ProgressReporter: Send + Sync {
     fn set_task_name(&self, _name: &str) {}
 }
 
-// 解析器接口
+// 解析器接口（统一为带 reporter 的单一方法，解析器可自由忽略 reporter）
 #[allow(dead_code)]
 pub trait SiteParser: Send + Sync {
 	fn name(&self) -> &'static str { "generic" }
@@ -34,16 +34,12 @@ pub trait SiteParser: Send + Sync {
 	fn can_handle(&self, host: &str) -> bool {
 		self.domains().iter().any(|d| host.ends_with(d))
 	}
-	fn parse<'a>(&'a self, client: &'a Client, url: &'a str) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>>;
-	fn parse_with_progress<'a>(
+	fn parse<'a>(
 		&'a self,
 		client: &'a Client,
 		url: &'a str,
 		reporter: Option<Arc<dyn ProgressReporter>>,
-	) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
-		let _ = reporter; // 默认忽略进度
-		self.parse(client, url)
-	}
+	) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>>;
 }
 
 // 最小通用解析器
@@ -55,8 +51,9 @@ impl GenericParser {
 
 impl SiteParser for GenericParser {
 	fn name(&self) -> &'static str { "generic" }
-	fn parse<'a>(&'a self, client: &'a Client, url: &'a str) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
+	fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
 		Box::pin(async move {
+			let _ = reporter;
 			let resp = client.get(url).await?;
 			let html = resp.text().await?;
 			let (title, imgs) = {
@@ -115,7 +112,7 @@ pub async fn parse_gallery_auto(
 	let host = parsed.host_str().unwrap_or("").to_string();
 	if let Some(site) = factory::detect_site_type_by_host(&host) {
 		if let Some(parser) = factory::create_for_site(site) {
-			return parser.parse_with_progress(client, url, reporter).await;
+			return parser.parse(client, url, reporter).await;
 		}
 	}
 	anyhow::bail!("未匹配到任何站点解析器，请检查 URL 或稍后重试")

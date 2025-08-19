@@ -1,4 +1,4 @@
-use crate::crawler::{ParsedGallery, SiteParser};
+use crate::crawler::{ParsedGallery, SiteParser, ProgressReporter};
 use crate::request::Client;
 
 pub struct TelegraphParser;
@@ -8,8 +8,9 @@ impl TelegraphParser { pub fn new() -> Self { Self } }
 impl SiteParser for TelegraphParser {
     fn name(&self) -> &'static str { "telegraph" }
     fn domains(&self) -> &'static [&'static str] { &["telegra.ph"] }
-    fn parse<'a>(&'a self, client: &'a Client, url: &'a str) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
+    fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
         Box::pin(async move {
+            let _ = reporter;
             let resp = client.get(url).await?;
             let html = resp.text().await?;
             let doc = scraper::Html::parse_document(&html);

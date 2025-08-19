@@ -9,39 +9,7 @@ impl HitomiParser { pub fn new() -> Self { Self } }
 impl SiteParser for HitomiParser {
     fn name(&self) -> &'static str { "hitomi" }
     fn domains(&self) -> &'static [&'static str] { &["hitomi.la"] }
-    fn parse<'a>(&'a self, client: &'a Client, url: &'a str) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
-        Box::pin(async move {
-            // 1) 从 URL 提取 ID
-            let id = extract_id(url).ok_or_else(|| anyhow::anyhow!("无法从 URL 提取 ID"))?;
-            // 2) 拉取 galleryinfo 脚本并解析为 JSON
-            let gi_url = format!("https://ltn.gold-usergeneratedcontent.net/galleries/{}.js", id);
-            let gi_resp = client.get(&gi_url).await?;
-            if !gi_resp.status().is_success() { anyhow::bail!("获取 galleryinfo 失败: {}", gi_resp.status()); }
-            let gi_text = gi_resp.text().await?;
-            let (title, files) = parse_galleryinfo(&gi_text)?;
-
-            // 3) 拉取 gg.js，并以 Rust 复刻关键逻辑生成图片 URL
-            let gg_url = "https://ltn.gold-usergeneratedcontent.net/gg.js";
-            let gg_resp = client.get(gg_url).await?;
-            if !gg_resp.status().is_success() { anyhow::bail!("获取 gg.js 失败: {}", gg_resp.status()); }
-            let gg_text = gg_resp.text().await?;
-            let gg = parse_gg_constants(&gg_text)?;
-
-            let mut image_urls: Vec<String> = Vec::with_capacity(files.len());
-            for f in files {
-                let ext = if f.haswebp == 1 { "webp" } else { infer_ext_from_name(&f.name).unwrap_or("jpg") };
-                let url = build_hitomi_url(&gg, &f.hash, ext);
-                image_urls.push(url);
-            }
-            if image_urls.is_empty() { anyhow::bail!("没有生成任何图片URL"); }
-            Ok(ParsedGallery { title: Some(title), image_urls, download_headers: {
-                let mut h = HeaderMap::new();
-                h.insert(REFERER, HeaderValue::from_static("https://hitomi.la/"));
-                Some(h)
-            } })
-        })
-    }
-    fn parse_with_progress<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
+    fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
         Box::pin(async move {
             let id = extract_id(url).ok_or_else(|| anyhow::anyhow!("无法从 URL 提取 ID"))?;
             let gi_url = format!("https://ltn.gold-usergeneratedcontent.net/galleries/{}.js", id);
