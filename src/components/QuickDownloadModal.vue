@@ -68,9 +68,6 @@ const closeModal = () => {
 
 // 创建下载处理器
 const downloadHandler = createDownloadHandler({
-    onSuccess: (taskId, downloadUrl) => {
-        closeModal();
-    },
     onError: (errorMsg) => {
         toast.error(errorMsg);
     },
@@ -84,6 +81,7 @@ async function handleDownload() {
     }
 
     await downloadHandler(url.value.trim());
+    closeModal();
 }
 
 // 处理键盘事件

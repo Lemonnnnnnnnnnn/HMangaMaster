@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::Manager;
 use tracing::info;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -6,12 +7,14 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 
 pub struct Logger {
     inited: std::sync::atomic::AtomicBool,
+    guard: Mutex<Option<tracing_appender::non_blocking::WorkerGuard>>,
 }
 
 impl Logger {
     pub fn new() -> Self {
         Self {
             inited: std::sync::atomic::AtomicBool::new(false),
+            guard: Mutex::new(None),
         }
     }
 
@@ -24,7 +27,7 @@ impl Logger {
         let log_dir = default_log_dir(app)?;
         std::fs::create_dir_all(&log_dir)?;
         let file_appender = RollingFileAppender::new(Rotation::DAILY, &log_dir, "app.log");
-        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
         let env_filter =
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
@@ -46,6 +49,9 @@ impl Logger {
             .with(stdout_layer);
 
         tracing::subscriber::set_global_default(subscriber)?;
+
+        // 保持 WorkerGuard 存活，确保文件日志后台线程不被过早释放
+        *self.guard.lock().unwrap() = Some(guard);
 
         info!("logger initialized at {:?}", log_dir);
         Ok(())

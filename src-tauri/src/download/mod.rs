@@ -4,6 +4,7 @@ use tokio::io::AsyncWriteExt;
 use crate::request::Client as RequestClient;
 use reqwest::header::HeaderMap;
 use reqwest::Url;
+use tracing::{error, warn};
 
 #[derive(Clone)]
 pub struct Config { pub retry_count: usize, pub retry_delay_secs: u64 }
@@ -28,16 +29,45 @@ impl Downloader {
             };
             match resp_result {
                 Ok(resp) => {
-                    if !resp.status().is_success() { last_err = Some(anyhow::anyhow!("bad status: {}", resp.status())); continue; }
-                    let mut file = tokio::fs::File::create(file_path).await?;
-                    let mut stream = resp.bytes_stream();
-                    use futures_util::StreamExt;
-                    while let Some(chunk) = stream.next().await { let data = chunk?; file.write_all(&data).await?; }
-                    return Ok(());
+                    let status = resp.status();
+                    if !status.is_success() {
+                        warn!(attempt = attempt + 1, status = %status, "response is not successful");
+                        last_err = Some(anyhow::anyhow!("bad status: {}", status));
+                        continue;
+                    }
+                    // 将流写入文件的过程放入单独分支，错误不直接返回函数，而是记录并进入下一次重试
+                    let write_res = async {
+                        let mut file = tokio::fs::File::create(file_path).await?;
+                        let mut stream = resp.bytes_stream();
+                        use futures_util::StreamExt;
+                        while let Some(chunk) = stream.next().await {
+                            match chunk {
+                                Ok(data) => {
+                                    if let Err(e) = file.write_all(&data).await { return Err::<(), anyhow::Error>(e.into()); }
+                                }
+                                Err(e) => { return Err::<(), anyhow::Error>(e.into()); }
+                            }
+                        }
+                        Ok::<(), anyhow::Error>(())
+                    }.await;
+                    match write_res {
+                        Ok(()) => {
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            warn!(attempt = attempt + 1, error = %e, "failed while writing response to file, will retry if attempts remain");
+                            last_err = Some(e);
+                            continue;
+                        }
+                    }
                 }
-                Err(e) => { last_err = Some(e.into()); }
+                Err(e) => {
+                    warn!(attempt = attempt + 1, error = %e, "request failed, will retry if attempts remain");
+                    last_err = Some(e.into());
+                }
             }
         }
+        error!(error = %last_err.as_ref().map(|e| e.to_string()).unwrap_or_else(|| "unknown".to_string()), "all download attempts failed");
         Err(last_err.unwrap_or_else(|| anyhow::anyhow!("download failed")))
     }
 

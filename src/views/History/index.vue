@@ -31,7 +31,7 @@ let historyTasks = ref<any[]>([])
 
 async function clearHistory() {
     try {
-        if (!confirm(`确定要清空任务吗？`)) {
+        if (!await confirm(`确定要清空任务吗？`)) {
             return false;
         }
         await invoke('history_clear');

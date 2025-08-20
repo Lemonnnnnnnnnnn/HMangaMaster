@@ -2,7 +2,7 @@ use parking_lot::RwLock;
 // use core::fmt;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::AtomicUsize;
 use tauri::{AppHandle, Emitter};
 use tokio_util::sync::CancellationToken;
 
@@ -22,7 +22,7 @@ impl Default for TaskManager {
     fn default() -> Self {
         Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
-            download_concurrency: 16,
+            download_concurrency: 8,
         }
     }
 }
@@ -138,7 +138,6 @@ impl TaskManager {
         }
         let ct = token.clone();
         let tm = self.tasks.clone();
-        tracing::info!(task_id = %task_id, total = %total, concurrency = %concurrency, "start_batch: starting downloads");
         let inflight_counter = Arc::new(AtomicUsize::new(0));
         tauri::async_runtime::spawn(async move {
             let mut stream = stream::iter(urls.into_iter().zip(paths.into_iter()).map(|(u, p)| {
@@ -146,23 +145,16 @@ impl TaskManager {
                 let app_handle = app.clone();
                 let tid = task_id.clone();
                 let cancel = ct.clone();
-                let inflight = inflight_counter.clone();
                 async move {
-                    let current_inflight = inflight.fetch_add(1, Ordering::SeqCst) + 1;
-                    tracing::info!(task_id = %tid, url = %u, inflight = %current_inflight, "download begin");
                     if cancel.is_cancelled() {
                         let _ = app_handle.emit(
                             "download:progress",
                             serde_json::json!({"taskId": tid, "url": u, "ok": false}),
                         );
-                        let left = inflight.fetch_sub(1, Ordering::SeqCst) - 1;
-                        tracing::info!(task_id = %tid, url = %u, inflight = %left, "download cancelled before start");
                         let res: anyhow::Result<()> = Err(anyhow::anyhow!("cancelled"));
                         return res;
                     }
                     let res = d.download_file(&u, &p).await;
-                    let after_finish_inflight = inflight.fetch_sub(1, Ordering::SeqCst) - 1;
-                    tracing::info!(task_id = %tid, url = %u, inflight = %after_finish_inflight, ok = %res.is_ok(), "download end");
                     let _ = app_handle.emit(
                         "download:progress",
                         serde_json::json!({"taskId": tid, "url": u, "ok": res.is_ok()}),
@@ -181,7 +173,6 @@ impl TaskManager {
                     t.progress.total = total;
                     t.updated_at = now_str();
                 }
-                tracing::info!(task_id = %task_id, progress = %current, total = %total, ok = %res.is_ok(), "stream item finished");
                 if res.is_err() {
                     if let Some(t) = w.get_mut(&task_id) {
                         if t.error.is_empty() {
@@ -261,3 +252,4 @@ impl TaskManager {
         token
     }
 }
+	
