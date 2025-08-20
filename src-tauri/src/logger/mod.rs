@@ -2,7 +2,6 @@ use std::path::PathBuf;
 use tauri::Manager;
 use tracing::info;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 
 pub struct Logger {
@@ -66,26 +65,11 @@ fn default_log_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 #[serde(rename_all = "camelCase")]
 pub struct LogInfo {
     pub dir: String,
-    pub current_file: String,
-    pub size_bytes: u64,
-    pub backups: Vec<String>,
 }
 
 pub fn get_log_info(app: &tauri::AppHandle) -> anyhow::Result<LogInfo> {
     let dir = default_log_dir(app)?;
-    let current = dir.join("app.log");
-    let pattern = dir.join("app.log*");
-    let mut backups = vec![];
-    for entry in glob::glob(pattern.to_string_lossy().as_ref())? {
-        if let Ok(path) = entry {
-            backups.push(path.to_string_lossy().to_string());
-        }
-    }
-    let size_bytes = std::fs::metadata(&current).map(|m| m.len()).unwrap_or(0);
     Ok(LogInfo {
         dir: dir.to_string_lossy().to_string(),
-        current_file: current.to_string_lossy().to_string(),
-        size_bytes,
-        backups,
     })
 }
