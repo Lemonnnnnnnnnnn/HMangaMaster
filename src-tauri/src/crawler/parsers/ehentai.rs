@@ -1,8 +1,8 @@
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::request::Client;
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE};
-use std::sync::{Arc};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 pub struct EhentaiParser {
     concurrency: usize,
@@ -34,7 +34,9 @@ impl SiteParser for EhentaiParser {
             let client = client.with_limit(self.concurrency);
             let mut headers = HeaderMap::new();
             headers.insert(COOKIE, HeaderValue::from_static("nw=1"));
-            if let Some(r) = reporter.as_ref() { r.set_task_name("EHentai - 正在获取专辑信息"); }
+            if let Some(r) = reporter.as_ref() {
+                r.set_task_name("EHentai - 正在获取专辑信息");
+            }
             let first = client.get_with_headers_rate_limited(url, &headers).await?;
             if !first.status().is_success() {
                 anyhow::bail!("状态码异常: {}", first.status());
@@ -64,7 +66,13 @@ impl SiteParser for EhentaiParser {
             };
             page_urls.sort();
             page_urls.dedup();
-            if let Some(r) = reporter.as_ref() { r.set_task_name(&format!("EHentai - 正在获取专辑页面 (0/{}页)", page_urls.len())); r.set_total(page_urls.len()); }
+            if let Some(r) = reporter.as_ref() {
+                r.set_task_name(&format!(
+                    "EHentai - 正在获取专辑页面 (0/{}页)",
+                    page_urls.len()
+                ));
+                r.set_total(page_urls.len());
+            }
 
             // 并发收集小图页
             let mut thumb_pages: Vec<String> = {
@@ -77,36 +85,42 @@ impl SiteParser for EhentaiParser {
                         let rep = reporter.clone();
                         let done = pages_done.clone();
                         {
-                        let value = page_urls.clone();
-                        async move {
-                            let mut local: Vec<String> = vec![];
-                            if let Ok(resp) = client_cloned
-                                .get_with_headers_rate_limited(&p, &headers_cloned)
-                                .await
-                            {
-                                if resp.status().is_success() {
-                                    if let Ok(h) = resp.text().await {
-                                        let d = scraper::Html::parse_document(&h);
-                                        if let Ok(sel_gdt) = scraper::Selector::parse("#gdt > a") {
-                                            for a in d.select(&sel_gdt) {
-                                                if let Some(href) = a.value().attr("href") {
-                                                    local.push(href.to_string());
+                            let value: Vec<String> = page_urls.clone();
+                            async move {
+                                let mut local: Vec<String> = vec![];
+                                if let Ok(resp) = client_cloned
+                                    .get_with_headers_rate_limited(&p, &headers_cloned)
+                                    .await
+                                {
+                                    if resp.status().is_success() {
+                                        if let Ok(h) = resp.text().await {
+                                            let d = scraper::Html::parse_document(&h);
+                                            if let Ok(sel_gdt) =
+                                                scraper::Selector::parse("#gdt > a")
+                                            {
+                                                for a in d.select(&sel_gdt) {
+                                                    if let Some(href) = a.value().attr("href") {
+                                                        local.push(href.to_string());
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
+                                if let Some(r) = rep.as_ref() {
+                                    let cur = done.fetch_add(1, Ordering::Relaxed) + 1;
+                                    r.inc(1);
+                                    r.set_task_name(&format!(
+                                        "EHentai - 正在获取专辑页面 ({} / {}页)",
+                                        cur,
+                                        value.len()
+                                    ));
+                                }
+                                local
                             }
-                            if let Some(r) = rep.as_ref() {
-                                let cur = done.fetch_add(1, Ordering::Relaxed) + 1;
-                                r.inc(1);
-                                r.set_task_name(&format!("EHentai - 正在获取专辑页面 ({} / {}页)", cur, value.len()));
-                            }
-                            local
-                        }
                         }
                     })
-                    .buffer_unordered(8)
+                    .buffer_unordered(self.concurrency)
                     .collect()
                     .await;
                 results.into_iter().flatten().collect()
@@ -116,7 +130,13 @@ impl SiteParser for EhentaiParser {
             if thumb_pages.is_empty() {
                 anyhow::bail!("未找到任何图片链接");
             }
-            if let Some(r) = reporter.as_ref() { r.set_task_name(&format!("EHentai - 正在解析图片链接 (0/{}张)", thumb_pages.len())); r.set_total(thumb_pages.len()); }
+            if let Some(r) = reporter.as_ref() {
+                r.set_task_name(&format!(
+                    "EHentai - 正在解析图片链接 (0/{}张)",
+                    thumb_pages.len()
+                ));
+                r.set_total(thumb_pages.len());
+            }
 
             // 并发解析最终大图
             let mut image_urls: Vec<String> = {
@@ -172,12 +192,15 @@ impl SiteParser for EhentaiParser {
                             if let Some(r) = rep.as_ref() {
                                 let cur = done.fetch_add(1, Ordering::Relaxed) + 1;
                                 r.inc(1);
-                                r.set_task_name(&format!("EHentai - 正在解析图片链接 ({} / {}张)", cur, total_imgs));
+                                r.set_task_name(&format!(
+                                    "EHentai - 正在解析图片链接 ({} / {}张)",
+                                    cur, total_imgs
+                                ));
                             }
                             final_src
                         }
                     })
-                    .buffer_unordered(8)
+                    .buffer_unordered(self.concurrency)
                     .collect()
                     .await;
                 results.into_iter().flatten().collect()
@@ -195,7 +218,11 @@ impl SiteParser for EhentaiParser {
                 r.set_task_name(&name);
             }
 
-            Ok(ParsedGallery { title, image_urls, download_headers: None })
+            Ok(ParsedGallery {
+                title,
+                image_urls,
+                download_headers: None,
+            })
         })
     }
 }

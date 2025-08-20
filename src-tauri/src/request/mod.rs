@@ -9,6 +9,8 @@ pub struct Client {
     limiter: Arc<Semaphore>,
 }
 
+const DEFAULT_CONCURRENCY: usize = 10;
+
 impl Client {
     pub fn new(proxy_url: Option<String>) -> anyhow::Result<Self> {
         let mut headers = HeaderMap::new();
@@ -28,7 +30,7 @@ impl Client {
 
         let http = builder.build()?;
         // 默认请求并发上限：10（可在特定站点覆盖）
-        let limiter = Arc::new(Semaphore::new(10));
+        let limiter = Arc::new(Semaphore::new(DEFAULT_CONCURRENCY));
         Ok(Self { http, default_headers: headers, limiter })
     }
 

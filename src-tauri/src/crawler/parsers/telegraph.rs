@@ -25,7 +25,7 @@ impl SiteParser for TelegraphParser {
                 .filter(|s| !s.is_empty());
 
             let mut images: Vec<String> = vec![];
-            for (idx, img) in doc.select(&sel_img).enumerate() {
+            for (_, img) in doc.select(&sel_img).enumerate() {
                 if let Some(src) = img.value().attr("src") {
                     let full = normalize_telegraph_url(src);
                     if !full.is_empty() { images.push(full); }
@@ -34,10 +34,7 @@ impl SiteParser for TelegraphParser {
                     let full = normalize_telegraph_url(data);
                     if !full.is_empty() { images.push(full); }
                 }
-                // 生成固定顺序，避免重复
-                let _ = idx; // keep enumeration for parity with Go naming if needed by caller
             }
-            images.sort();
             images.dedup();
 
             if images.is_empty() { return Err(anyhow::anyhow!("未找到任何图片")); }

@@ -1,8 +1,9 @@
 use std::path::PathBuf;
+use tauri::Manager;
 use tracing::info;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
-use tauri::Manager;
 
 pub struct Logger {
     inited: std::sync::atomic::AtomicBool,
@@ -10,7 +11,9 @@ pub struct Logger {
 
 impl Logger {
     pub fn new() -> Self {
-        Self { inited: std::sync::atomic::AtomicBool::new(false) }
+        Self {
+            inited: std::sync::atomic::AtomicBool::new(false),
+        }
     }
 
     pub fn init(&self, app: &tauri::AppHandle) -> anyhow::Result<()> {
@@ -24,8 +27,8 @@ impl Logger {
         let file_appender = RollingFileAppender::new(Rotation::DAILY, &log_dir, "app.log");
         let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
-        let env_filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("info"));
+        let env_filter =
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
         let fmt_layer = fmt::layer()
             .with_writer(non_blocking)
@@ -74,7 +77,9 @@ pub fn get_log_info(app: &tauri::AppHandle) -> anyhow::Result<LogInfo> {
     let pattern = dir.join("app.log*");
     let mut backups = vec![];
     for entry in glob::glob(pattern.to_string_lossy().as_ref())? {
-        if let Ok(path) = entry { backups.push(path.to_string_lossy().to_string()); }
+        if let Ok(path) = entry {
+            backups.push(path.to_string_lossy().to_string());
+        }
     }
     let size_bytes = std::fs::metadata(&current).map(|m| m.len()).unwrap_or(0);
     Ok(LogInfo {
@@ -84,5 +89,3 @@ pub fn get_log_info(app: &tauri::AppHandle) -> anyhow::Result<LogInfo> {
         backups,
     })
 }
-
-
