@@ -2,8 +2,7 @@ use std::path::{Path};
 use tokio::io::AsyncWriteExt;
 
 use crate::request::Client as RequestClient;
-use reqwest::header::HeaderMap;
-use reqwest::Url;
+use rr::HeaderMap;
 use tracing::{error, warn};
 
 #[derive(Clone)]
@@ -87,11 +86,22 @@ pub fn build_download_plan(image_urls: &[String], base_path: &std::path::Path) -
 }
 
 pub fn infer_ext_from_url(url: &str) -> Option<&'static str> {
-    let path = Url::parse(url).ok()?.path().to_ascii_lowercase();
-    if path.ends_with(".webp") { return Some("webp"); }
-    if path.ends_with(".jpg") || path.ends_with(".jpeg") { return Some("jpg"); }
-    if path.ends_with(".png") { return Some("png"); }
-    if path.ends_with(".gif") { return Some("gif"); }
+    // 简单的路径提取逻辑，避免依赖 url crate
+    let path = if let Some(query_start) = url.find('?') {
+        &url[..query_start]
+    } else {
+        url
+    };
+
+    let path_lower = if let Some(hash_start) = path.find('#') {
+        path[..hash_start].to_ascii_lowercase()
+    } else {
+        path.to_ascii_lowercase()
+    };
+    if path_lower.ends_with(".webp") { return Some("webp"); }
+    if path_lower.ends_with(".jpg") || path_lower.ends_with(".jpeg") { return Some("jpg"); }
+    if path_lower.ends_with(".png") { return Some("png"); }
+    if path_lower.ends_with(".gif") { return Some("gif"); }
     None
 }
 

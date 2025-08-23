@@ -1,7 +1,8 @@
 use serde::Serialize;
+use url::Url;
 
 use crate::request::Client;
-use reqwest::header::HeaderMap;
+use rr::HeaderMap;
 
 pub mod factory;
 pub mod parsers;
@@ -108,7 +109,7 @@ pub async fn parse_gallery_auto(
     reporter: Option<Arc<dyn ProgressReporter>>,
 ) -> anyhow::Result<ParsedGallery> {
 	ensure_builtin_registered();
-	let parsed = reqwest::Url::parse(url).map_err(|e| anyhow::anyhow!("无效的 URL: {}", e))?;
+	let parsed = url.parse::<Url>().map_err(|e| anyhow::anyhow!("无效的 URL: {}", e))?;
 	let host = parsed.host_str().unwrap_or("").to_string();
 	if let Some(site) = factory::detect_site_type_by_host(&host) {
 		if let Some(parser) = factory::create_for_site(site) {

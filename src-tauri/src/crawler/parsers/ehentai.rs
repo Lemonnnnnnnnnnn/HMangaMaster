@@ -1,6 +1,7 @@
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::request::Client;
-use reqwest::header::{HeaderMap, HeaderValue, COOKIE};
+use rr::HeaderMap;
+use rr::headers::common_headers::COOKIE;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -33,7 +34,7 @@ impl SiteParser for EhentaiParser {
             // 覆写请求并发限制
             let client = client.with_limit(self.concurrency);
             let mut headers = HeaderMap::new();
-            headers.insert(COOKIE, HeaderValue::from_static("nw=1"));
+            headers.insert(COOKIE, "nw=1")?; // 使用 rr::HeaderMap 的 insert 方法
             if let Some(r) = reporter.as_ref() {
                 r.set_task_name("EHentai - 正在获取专辑信息");
             }

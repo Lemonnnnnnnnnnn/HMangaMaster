@@ -2,14 +2,13 @@ use parking_lot::RwLock;
 // use core::fmt;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
 use tauri::{AppHandle, Emitter};
 use tokio_util::sync::CancellationToken;
 
 use crate::download::{Config as DownloadConfig, Downloader};
 use crate::history;
 use crate::request::Client as RequestClient;
-use reqwest::header::HeaderMap;
+use rr::HeaderMap;
 
 use super::{Progress, Task, TaskStatus};
 
@@ -138,7 +137,6 @@ impl TaskManager {
         }
         let ct = token.clone();
         let tm = self.tasks.clone();
-        let inflight_counter = Arc::new(AtomicUsize::new(0));
         tauri::async_runtime::spawn(async move {
             let mut stream = stream::iter(urls.into_iter().zip(paths.into_iter()).map(|(u, p)| {
                 let d = downloader.clone();

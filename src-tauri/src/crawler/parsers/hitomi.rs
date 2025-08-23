@@ -1,6 +1,7 @@
 use crate::crawler::{ParsedGallery, SiteParser, ProgressReporter};
 use crate::request::Client;
-use reqwest::header::{HeaderMap, HeaderValue, REFERER};
+use rr::HeaderMap;
+use rr::headers::common_headers::REFERER;
 
 pub struct HitomiParser;
 
@@ -36,7 +37,7 @@ impl SiteParser for HitomiParser {
             if image_urls.is_empty() { anyhow::bail!("没有生成任何图片URL"); }
             Ok(ParsedGallery { title: Some(title), image_urls, download_headers: {
                 let mut h = HeaderMap::new();
-                h.insert(REFERER, HeaderValue::from_static("https://hitomi.la/"));
+                h.insert(REFERER, "https://hitomi.la/")?;
                 Some(h)
             } })
         })
