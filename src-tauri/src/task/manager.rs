@@ -88,6 +88,8 @@ impl TaskManager {
         }
     }
 
+
+
     pub fn all(&self) -> Vec<Task> {
         self.tasks.read().values().cloned().collect()
     }
@@ -152,12 +154,17 @@ impl TaskManager {
             .buffer_unordered(concurrency);
 
             let mut current: i32 = 0;
+            let mut failed_count: i32 = 0;
             while let Some(res) = stream.next().await {
                 current += 1;
+                if res.is_err() {
+                    failed_count += 1;
+                }
                 let mut w = tm.write();
                 if let Some(t) = w.get_mut(&task_id) {
                     t.progress.current = current;
                     t.progress.total = total;
+                    t.failed_count = failed_count;
                     t.updated_at = now_str();
                 }
                 if res.is_err() {
@@ -175,10 +182,12 @@ impl TaskManager {
                 if let Some(t) = w.get_mut(&task_id) {
                     if ct.is_cancelled() {
                         t.status = TaskStatus::Cancelled;
-                    } else if t.error.is_empty() {
+                    } else if t.failed_count == 0 {
                         t.status = TaskStatus::Completed;
-                    } else {
+                    } else if t.failed_count == t.progress.total {
                         t.status = TaskStatus::Failed;
+                    } else {
+                        t.status = TaskStatus::PartialFailed;
                     }
                     t.complete_time = now_str();
                     t.updated_at = t.complete_time.clone();
@@ -187,10 +196,15 @@ impl TaskManager {
                         TaskStatus::Parsing => "parsing".to_string(),
                         TaskStatus::Running => "downloading".to_string(),
                         TaskStatus::Completed => "completed".to_string(),
+                        TaskStatus::PartialFailed => "partial_failed".to_string(),
                         TaskStatus::Failed => "failed".to_string(),
                         TaskStatus::Cancelled => "cancelled".to_string(),
                     };
-                    error_msg = t.error.clone();
+                    error_msg = if t.failed_count > 0 {
+                        format!("下载失败 {}/{}。{}", t.failed_count, t.progress.total, t.error)
+                    } else {
+                        t.error.clone()
+                    };
                     // 写历史
                     let dto = history::DownloadTaskDTO {
                         id: t.id.clone(),
@@ -201,6 +215,7 @@ impl TaskManager {
                         complete_time: t.complete_time.clone(),
                         updated_at: t.updated_at.clone(),
                         error: t.error.clone(),
+                        failed_count: t.failed_count,
                         name: t.name.clone(),
                         progress: history::Progress {
                             current: t.progress.current,

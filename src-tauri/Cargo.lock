@@ -3439,7 +3439,7 @@ dependencies = [
 [[package]]
 name = "rr"
 version = "0.1.0"
-source = "git+https://github.com/Lemonnnnnnnnnnn/rr#e172f51139f0be79227c3ccb733a5553f24668c9"
+source = "git+https://github.com/Lemonnnnnnnnnnn/rr#9b806da517751d678ac217645ca72cae3d788709"
 dependencies = [
  "async-trait",
  "bytes",

@@ -6,6 +6,7 @@ pub enum TaskStatus {
     #[serde(rename = "parsing")] Parsing,
     #[serde(rename = "downloading")] Running,
     #[serde(rename = "completed")] Completed,
+    #[serde(rename = "partial_failed")] PartialFailed,
     #[serde(rename = "failed")] Failed,
     #[serde(rename = "cancelled")] Cancelled,
 }
@@ -23,6 +24,7 @@ pub struct Task {
     pub save_path: String,
     pub name: String,
     pub error: String,
+    pub failed_count: i32,
     pub progress: Progress,
     pub start_time: String,
     pub complete_time: String,
@@ -31,7 +33,19 @@ pub struct Task {
 
 impl Default for Task {
     fn default() -> Self {
-        Self { id: String::new(), url: String::new(), status: TaskStatus::Pending, save_path: String::new(), name: String::new(), error: String::new(), progress: Progress::default(), start_time: String::new(), complete_time: String::new(), updated_at: String::new() }
+        Self {
+            id: String::new(),
+            url: String::new(),
+            status: TaskStatus::Pending,
+            save_path: String::new(),
+            name: String::new(),
+            error: String::new(),
+            failed_count: 0,
+            progress: Progress::default(),
+            start_time: String::new(),
+            complete_time: String::new(),
+            updated_at: String::new()
+        }
     }
 }
 

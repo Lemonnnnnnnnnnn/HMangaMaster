@@ -49,8 +49,6 @@ pub fn run() {
             commands::history_get,
             commands::history_add,
             commands::history_clear,
-            // download
-            commands::download_file,
             // task
             commands::task_cancel,
             commands::task_all,

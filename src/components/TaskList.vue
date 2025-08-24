@@ -39,9 +39,10 @@
                 </td>
                 <td v-if="mode === 'history'">{{ task.status === 'completed' ? formatTime(task.completeTime ?? '') : '-' }}</td>
                 <td v-if="mode === 'history'" class="max-w-64">
-                    <span v-if="task.status === 'failed' && task.error"
+                    <span v-if="(task.status === 'failed' || task.status === 'partial_failed') && task.error"
                           :title="task.error"
-                          class="text-red-400 text-xs truncate">
+                          :class="task.status === 'partial_failed' ? 'text-yellow-400' : 'text-red-400'"
+                          class="text-xs truncate">
                         {{ task.error }}
                     </span>
                     <span v-else class="text-neutral-500">-</span>
@@ -65,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { Loader, ArrowBigDownDash, CircleCheck, CircleX, CircleOff } from 'lucide-vue-next';
+import { Loader, ArrowBigDownDash, CircleCheck, CircleX, CircleOff, AlertTriangle } from 'lucide-vue-next';
 import Button from './Button.vue';
 // 类型最小替代，避免依赖 wailsjs
 type DownloadTaskLike = {
@@ -75,6 +76,7 @@ type DownloadTaskLike = {
     savePath?: string;
     name?: string;
     error?: string;
+    failedCount?: number;
     progress?: { current?: number; total?: number } | null;
     startTime?: string;
     completeTime?: string;
@@ -117,6 +119,8 @@ function getStatusIcon(status: string) {
         return { icon: ArrowBigDownDash, class: 'animate-bounce' };
     } else if (status === 'completed') {
         return { icon: CircleCheck, class: '' };
+    } else if (status === 'partial_failed') {
+        return { icon: AlertTriangle, class: 'text-yellow-500' };
     } else if (status === 'failed') {
         return { icon: CircleX, class: '' };
     } else if (status === 'cancelled') {
@@ -134,6 +138,7 @@ function formatStatus(status: string): string {
         'parsing': '解析中',
         'downloading': '下载中',
         'completed': '已完成',
+        'partial_failed': '部分失败',
         'failed': '失败',
         'cancelled': '已取消'
     };

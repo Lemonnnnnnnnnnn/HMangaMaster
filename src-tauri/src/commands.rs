@@ -185,33 +185,6 @@ pub fn history_clear(_state: State<AppState>, app: tauri::AppHandle) -> Result<(
     Ok(())
 }
 
-// ---------- download ----------
-#[tauri::command]
-pub async fn download_file(
-    state: State<'_, AppState>,
-    app: tauri::AppHandle,
-    url: String,
-    save_path: String,
-) -> Result<bool, String> {
-    use std::path::PathBuf;
-    let client = { state.request.read().clone() };
-    let downloader = download::Downloader::new(client, download::Config::default());
-    let path = PathBuf::from(save_path);
-    match downloader.download_file(&url, &path).await {
-        Ok(_) => {
-            let _ = app.emit("download:completed", &url);
-            Ok(true)
-        }
-        Err(e) => {
-            let _ = app.emit(
-                "download:failed",
-                serde_json::json!({"url": url, "message": e.to_string()}),
-            );
-            Err(e.to_string())
-        }
-    }
-}
-
 // ---------- task (最小下载批任务 + 取消) ----------
 #[tauri::command]
 pub fn task_all(state: State<AppState>) -> Result<Vec<crate::task::Task>, String> {
@@ -326,6 +299,7 @@ pub async fn task_start_crawl(
                         complete_time: t.complete_time.clone(),
                         updated_at: t.updated_at.clone(),
                         error: t.error.clone(),
+                        failed_count: t.failed_count,
                         name: t.name.clone(),
                         progress: history::Progress {
                             current: t.progress.current,

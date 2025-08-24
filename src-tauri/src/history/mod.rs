@@ -14,6 +14,7 @@ pub struct DownloadTaskDTO {
     pub complete_time: String,
     pub updated_at: String,
     pub error: String,
+    pub failed_count: i32,
     pub name: String,
     pub progress: Progress,
 }
