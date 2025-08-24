@@ -6,7 +6,7 @@ use rr::HeaderMap;
 
 pub mod factory;
 pub mod parsers;
-pub mod reporter;
+pub mod progress;
 
 use std::sync::Arc;
 

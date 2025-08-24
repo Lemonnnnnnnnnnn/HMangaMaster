@@ -211,7 +211,7 @@ pub async fn task_start_crawl(state: State<'_, AppState>, app: tauri::AppHandle,
     // 为任务创建取消令牌并注册，解析与下载公用
     let cancel_token = tokio_util::sync::CancellationToken::new();
     state.cancels.write().insert(task_id.clone(), cancel_token.clone());
-    let reporter = Arc::new(crate::crawler::reporter::TaskParseReporter::new(task_id.clone(), app.clone(), state.task_manager.clone()));
+    let reporter = Arc::new(crate::crawler::progress::TaskParseReporter::new(task_id.clone(), app.clone(), state.task_manager.clone()));
     // 解析阶段支持取消
     let parsed = match {
         let fut = crawler::parse_gallery_auto(&client, &url, Some(reporter));
