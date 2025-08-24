@@ -59,6 +59,7 @@ export async function executeDownload(options: DownloadOptions): Promise<Downloa
     
     // 执行爬取
     const taskId = await invoke<string>('task_start_crawl', { url: url.trim() });
+    console.log(taskId);
     
     if (taskId) {
       // 下载任务创建成功

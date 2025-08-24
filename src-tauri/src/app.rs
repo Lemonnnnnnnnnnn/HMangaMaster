@@ -5,6 +5,7 @@ use tauri::AppHandle;
 use crate::config::Manager as ConfigManager;
 use crate::logger::Logger;
 use crate::request::Client as RequestClient;
+use crate::services::TaskService;
 use tokio_util::sync::CancellationToken;
 use std::collections::HashMap;
 use crate::task::TaskManager;
@@ -14,9 +15,10 @@ use crate::task::TaskManager;
 pub struct AppState {
     pub logger: Arc<Logger>,
     pub config: Arc<RwLock<ConfigManager>>,
-    pub request: Arc<RwLock<RequestClient>>, 
+    pub request: Arc<RwLock<RequestClient>>,
     pub cancels: Arc<RwLock<HashMap<String, CancellationToken>>>,
     pub task_manager: Arc<RwLock<TaskManager>>,
+    pub task_service: Arc<TaskService>,
     // 预留：后续若需要共享实例再接入
     // pub library: Arc<RwLock<LibraryManager>>,
     // pub history: Arc<RwLock<HistoryManager>>,
@@ -30,6 +32,7 @@ impl AppState {
             request: Arc::new(RwLock::new(RequestClient::new(None).unwrap())),
             cancels: Arc::new(RwLock::new(HashMap::new())),
             task_manager: Arc::new(RwLock::new(TaskManager::default())),
+            task_service: Arc::new(TaskService::new()),
         }
     }
 

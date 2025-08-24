@@ -70,11 +70,14 @@ async function handleDownload() {
     }
 
     await downloadHandler(url.value.trim());
-    url.value = '';
+    // url.value = '';
 }
 
 // 创建下载处理器
 const downloadHandler = createDownloadHandler({
+    onStart() {
+        url.value = '';
+    },
     onError: (errorMsg) => {
         toast.error(errorMsg);
     },

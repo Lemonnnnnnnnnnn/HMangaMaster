@@ -1,16 +1,9 @@
-use tauri::Emitter;
 use tauri::State;
 
 use crate::app::AppState;
-use crate::crawler;
-use crate::download;
 use crate::history;
 use crate::library;
 use crate::logger;
-use crate::progress;
-use crate::task;
-
-use std::sync::Arc;
 
 // ---------- logger ----------
 #[tauri::command]
@@ -171,29 +164,25 @@ pub fn history_add(
     app: tauri::AppHandle,
     record: history::DownloadTaskDTO,
 ) -> Result<(), String> {
-    let mut mgr = history::Manager::default();
-    let _ = mgr.set_dir_from_app(&app);
-    mgr.add_record(record);
-    Ok(())
+    crate::services::HistoryService::add_history_record(&record, &app)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn history_clear(_state: State<AppState>, app: tauri::AppHandle) -> Result<(), String> {
-    let mut mgr = history::Manager::default();
-    let _ = mgr.set_dir_from_app(&app);
-    mgr.clear();
-    Ok(())
+    crate::services::HistoryService::clear_history(&app)
+        .map_err(|e| e.to_string())
 }
 
 // ---------- task (最小下载批任务 + 取消) ----------
 #[tauri::command]
 pub fn task_all(state: State<AppState>) -> Result<Vec<crate::task::Task>, String> {
-    Ok(state.task_manager.read().all())
+    Ok(state.task_service.get_all_tasks(&state))
 }
 
 #[tauri::command]
 pub fn task_active(state: State<AppState>) -> Result<Vec<crate::task::Task>, String> {
-    Ok(state.task_manager.read().active())
+    Ok(state.task_service.get_active_tasks(&state))
 }
 
 #[tauri::command]
@@ -201,13 +190,14 @@ pub fn task_by_id(
     state: State<AppState>,
     task_id: String,
 ) -> Result<Option<crate::task::Task>, String> {
-    Ok(state.task_manager.read().by_id(&task_id))
+    Ok(state.task_service.get_task_by_id(&task_id, &state))
 }
 
 #[tauri::command]
 pub fn task_clear_history(state: State<AppState>) -> Result<bool, String> {
-    state.task_manager.read().clear_non_active();
-    Ok(true)
+    state.task_service.clear_history_tasks(&state)
+        .map_err(|e| e.to_string())
+        .map(|_| true)
 }
 
 // 历史任务（从磁盘）
@@ -216,9 +206,8 @@ pub fn task_history(
     _state: State<AppState>,
     app: tauri::AppHandle,
 ) -> Result<Vec<history::DownloadTaskDTO>, String> {
-    let mut mgr = history::Manager::default();
-    let _ = mgr.set_dir_from_app(&app);
-    Ok(mgr.get_history())
+    crate::services::HistoryService::get_task_history(&app)
+        .map_err(|e| e.to_string())
 }
 
 // 单任务进度
@@ -227,133 +216,19 @@ pub fn task_progress(
     state: State<AppState>,
     task_id: String,
 ) -> Result<crate::task::Progress, String> {
-    Ok(state
-        .task_manager
-        .read()
-        .by_id(&task_id)
-        .map(|t| t.progress.clone())
-        .unwrap_or_default())
+    Ok(state.task_service.get_task_progress(&task_id, &state))
 }
 
 // ---------- crawler ----------
-// 最小实现：创建一个解析任务，解析出若干图片 URL，然后复用批量下载逻辑
+// 重构后的简化实现：使用TaskService处理所有复杂逻辑
 #[tauri::command]
 pub async fn task_start_crawl(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
     url: String,
 ) -> Result<String, String> {
-    // 生成 task_id
-    let task_id = uuid::Uuid::new_v4().to_string();
-    // 在解析前就创建任务，便于前端尽早可见（解析阶段暂不计入进度）
-    state.task_manager.read().create_or_start(&task_id, &url, 0);
-    // 解析（同步/异步）
-    let client = { state.request.read().clone() };
-    let output_dir = state.config.read().get_output_dir();
-    // 为任务创建取消令牌并注册，解析与下载公用
-    let cancel_token = tokio_util::sync::CancellationToken::new();
-    state
-        .cancels
-        .write()
-        .insert(task_id.clone(), cancel_token.clone());
-    let reporter = Arc::new(progress::TaskReporter::new(
-        task_id.clone(),
-        state.task_manager.clone(),
-    ));
-    // 解析阶段支持取消
-    let parsed = match {
-        let fut = crawler::parse_gallery_auto(&client, &url, Some(reporter));
-        tokio::select! {
-            biased;
-            _ = cancel_token.cancelled() => Err(anyhow::anyhow!("cancelled")),
-            res = fut => res,
-        }
-    } {
-        Ok(p) => p,
-        Err(e) => {
-            // 若为取消，标记为取消；否则标记失败
-            if cancel_token.is_cancelled() {
-                state.task_manager.read().set_cancelled(&task_id);
-            } else {
-                state
-                    .task_manager
-                    .read()
-                    .set_failed(&task_id, &e.to_string());
-            }
-            // 写入历史
-            {
-                let t = state.task_manager.read().by_id(&task_id);
-                if let Some(t) = t {
-                    let mut hm = history::Manager::default();
-                    let _ = hm.set_dir_from_app(&app);
-                    let dto = history::DownloadTaskDTO {
-                        id: t.id.clone(),
-                        url: t.url.clone(),
-                        status: match t.status {
-                            task::TaskStatus::Cancelled => "cancelled".into(),
-                            task::TaskStatus::Failed => "failed".into(),
-                            _ => "failed".into(),
-                        },
-                        save_path: t.save_path.clone(),
-                        start_time: t.start_time.clone(),
-                        complete_time: t.complete_time.clone(),
-                        updated_at: t.updated_at.clone(),
-                        error: t.error.clone(),
-                        failed_count: t.failed_count,
-                        name: t.name.clone(),
-                        progress: history::Progress {
-                            current: t.progress.current,
-                            total: t.progress.total,
-                        },
-                    };
-                    hm.add_record(dto);
-                }
-            }
-            if cancel_token.is_cancelled() {
-                let _ = app.emit("download:cancelled", serde_json::json!({"taskId": task_id}));
-            } else {
-                let _ = app.emit(
-                    "download:failed",
-                    serde_json::json!({"taskId": task_id, "message": e.to_string()}),
-                );
-            }
-            return Err(e.to_string());
-        }
-    };
-    if parsed.image_urls.is_empty() {
-        return Err("未解析到图片".into());
-    }
-    // 生成保存路径
-    let safe_name = sanitize_filename::sanitize(
-        parsed
-            .title
-            .clone()
-            .unwrap_or_else(|| "gallery".to_string()),
-    );
-    let base_path = std::path::PathBuf::from(output_dir).join(&safe_name);
-    let (urls, paths) = download::build_download_plan(&parsed.image_urls, &base_path);
-    // 解析结束后，设置任务可见的名称与保存目录，并更新总数为图片数量；切换为 downloading
-    state.task_manager.read().set_name_and_path(
-        &task_id,
-        &safe_name,
-        base_path.to_string_lossy().as_ref(),
-    );
-    state
-        .task_manager
-        .read()
-        .set_status_downloading(&task_id, urls.len() as i32);
-    // 启动批量下载任务（站点可通过 ParsedGallery.download_headers 提供默认请求头）
-    let token = state.task_manager.read().start_batch(
-        app.clone(),
-        task_id.clone(),
-        urls,
-        paths,
-        client,
-        Some(cancel_token.clone()),
-        parsed.download_headers,
-    );
-    state.cancels.write().insert(task_id.clone(), token);
-    Ok(task_id)
+    state.task_service.start_crawl_task(url, app, &state).await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -362,11 +237,6 @@ pub fn task_cancel(
     app: tauri::AppHandle,
     task_id: String,
 ) -> Result<bool, String> {
-    if let Some(token) = state.cancels.write().remove(&task_id) {
-        token.cancel();
-        state.task_manager.read().set_cancelled(&task_id);
-        let _ = app.emit("download:cancelled", serde_json::json!({"taskId": task_id}));
-        return Ok(true);
-    }
-    Ok(false)
+    state.task_service.cancel_task(&task_id, &app, &state)
+        .map_err(|e| e.to_string())
 }
