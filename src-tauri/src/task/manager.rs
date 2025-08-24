@@ -214,7 +214,7 @@ impl TaskManager {
                         start_time: t.start_time.clone(),
                         complete_time: t.complete_time.clone(),
                         updated_at: t.updated_at.clone(),
-                        error: t.error.clone(),
+                        error: error_msg.clone(),
                         failed_count: t.failed_count,
                         name: t.name.clone(),
                         progress: history::Progress {
