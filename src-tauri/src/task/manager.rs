@@ -52,7 +52,6 @@ impl TaskManager {
         }
     }
 
-
     pub fn set_name_and_path(&self, task_id: &str, name: &str, save_path: &str) {
         let mut w = self.tasks.write();
         if let Some(t) = w.get_mut(task_id) {
@@ -119,8 +118,8 @@ impl TaskManager {
         token_opt: Option<CancellationToken>,
         default_headers: Option<HeaderMap>,
     ) -> CancellationToken {
-        use futures_util::StreamExt;
         use futures_util::stream;
+        use futures_util::StreamExt;
         let concurrency = self.download_concurrency;
         // 将请求客户端的限流与期望并发对齐，避免内部信号量限制导致并发达不到预期
         let client = client.with_limit(concurrency);
@@ -140,23 +139,13 @@ impl TaskManager {
         tauri::async_runtime::spawn(async move {
             let mut stream = stream::iter(urls.into_iter().zip(paths.into_iter()).map(|(u, p)| {
                 let d = downloader.clone();
-                let app_handle = app.clone();
-                let tid = task_id.clone();
                 let cancel = ct.clone();
                 async move {
                     if cancel.is_cancelled() {
-                        let _ = app_handle.emit(
-                            "download:progress",
-                            serde_json::json!({"taskId": tid, "url": u, "ok": false}),
-                        );
                         let res: anyhow::Result<()> = Err(anyhow::anyhow!("cancelled"));
                         return res;
                     }
                     let res = d.download_file(&u, &p).await;
-                    let _ = app_handle.emit(
-                        "download:progress",
-                        serde_json::json!({"taskId": tid, "url": u, "ok": res.is_ok()}),
-                    );
                     res
                 }
             }))
@@ -250,4 +239,3 @@ impl TaskManager {
         token
     }
 }
-	
