@@ -1,5 +1,7 @@
 use crate::crawler::{ParsedGallery, SiteParser, ProgressReporter};
 use crate::request::Client;
+use crate::progress::ProgressContext;
+use crate::crawler::parsers::common::{RequestContext, url_utils};
 
 pub struct TelegraphParser;
 
@@ -10,9 +12,14 @@ impl SiteParser for TelegraphParser {
     fn domains(&self) -> &'static [&'static str] { &["telegra.ph"] }
     fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
         Box::pin(async move {
-            let _ = reporter;
-            let resp = client.get(url).await?;
-            let html = resp.text().await?;
+            // 创建ProgressContext
+            let progress = ProgressContext::new(reporter, "Telegraph".to_string());
+
+            // 创建RequestContext
+            let request_ctx = RequestContext::with_concurrency(client.clone(), 3);
+
+            // 获取HTML内容
+            let html = request_ctx.fetch_html(url).await?;
             let doc = scraper::Html::parse_document(&html);
             let sel_h1 = scraper::Selector::parse("h1").unwrap();
             let sel_img = scraper::Selector::parse("img").unwrap();
@@ -24,30 +31,38 @@ impl SiteParser for TelegraphParser {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty());
 
-            let mut images: Vec<String> = vec![];
+            // 使用ProgressContext
+            progress.set_message("正在解析图片链接");
+
+            let mut raw_urls: Vec<String> = vec![];
             for (_, img) in doc.select(&sel_img).enumerate() {
                 if let Some(src) = img.value().attr("src") {
-                    let full = normalize_telegraph_url(src);
-                    if !full.is_empty() { images.push(full); }
+                    if let Some(normalized) = url_utils::normalize_single_url("telegra.ph", src) {
+                        raw_urls.push(normalized);
+                    }
                 }
                 if let Some(data) = img.value().attr("data-src") {
-                    let full = normalize_telegraph_url(data);
-                    if !full.is_empty() { images.push(full); }
+                    if let Some(normalized) = url_utils::normalize_single_url("telegra.ph", data) {
+                        raw_urls.push(normalized);
+                    }
                 }
             }
-            images.dedup();
 
-            if images.is_empty() { return Err(anyhow::anyhow!("未找到任何图片")); }
+            // 去重和过滤
+            let images = url_utils::deduplicate_urls(raw_urls);
+
+            if images.is_empty() {
+                anyhow::bail!("未找到任何图片");
+            }
+
+            progress.update(1, 1, "解析完成，准备下载");
+
             Ok(ParsedGallery { title, image_urls: images, download_headers: None })
         })
     }
 }
 
-fn normalize_telegraph_url(u: &str) -> String {
-    if u.starts_with("http://") || u.starts_with("https://") { return u.to_string(); }
-    if u.starts_with('/') { return format!("https://telegra.ph{}", u); }
-    String::new()
-}
+
 
 pub fn register() {
     use crate::crawler::factory::{register, register_host_contains};

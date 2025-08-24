@@ -1,3 +1,4 @@
+pub mod common;  // 共享工具和RequestContext
 pub mod telegraph;
 pub mod ehentai;
 pub mod nhentai; // Nhentai 解析器

@@ -1,5 +1,7 @@
 use crate::crawler::{ParsedGallery, SiteParser, ProgressReporter};
 use crate::request::Client;
+use crate::progress::ProgressContext;
+use crate::crawler::parsers::common::RequestContext;
 use rr::HeaderMap;
 use rr::headers::common_headers::REFERER;
 
@@ -12,29 +14,46 @@ impl SiteParser for HitomiParser {
     fn domains(&self) -> &'static [&'static str] { &["hitomi.la"] }
     fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
         Box::pin(async move {
+            // 创建ProgressContext
+            let progress = ProgressContext::new(reporter, "Hitomi".to_string());
+
             let id = extract_id(url).ok_or_else(|| anyhow::anyhow!("无法从 URL 提取 ID"))?;
+
+            // 创建RequestContext
+            let request_ctx = RequestContext::with_concurrency(client.clone(), 3);
+
+            // 获取galleryinfo
             let gi_url = format!("https://ltn.gold-usergeneratedcontent.net/galleries/{}.js", id);
-            let gi_resp = client.get(&gi_url).await?;
-            if !gi_resp.status().is_success() { anyhow::bail!("获取 galleryinfo 失败: {}", gi_resp.status()); }
-            let gi_text = gi_resp.text().await?;
+            let gi_text = request_ctx.fetch_html(&gi_url).await?;
             let (title, files) = parse_galleryinfo(&gi_text)?;
 
-            if let Some(r) = reporter.as_ref() { r.set_task_name(&format!("Hitomi - 正在解析图片链接 (0/{}张)", files.len())); r.set_total(files.len()); }
+            if files.is_empty() {
+                anyhow::bail!("未找到任何文件信息");
+            }
 
+            // 使用ProgressContext
+            progress.update(0, files.len(), "正在解析图片链接");
+
+            // 获取gg.js
             let gg_url = "https://ltn.gold-usergeneratedcontent.net/gg.js";
-            let gg_resp = client.get(gg_url).await?;
-            if !gg_resp.status().is_success() { anyhow::bail!("获取 gg.js 失败: {}", gg_resp.status()); }
-            let gg_text = gg_resp.text().await?;
+            let gg_text = request_ctx.fetch_html(gg_url).await?;
             let gg = parse_gg_constants(&gg_text)?;
 
-            let mut image_urls: Vec<String> = Vec::with_capacity(files.len());
-            for f in files {
+            let total_files = files.len();
+            let mut image_urls: Vec<String> = Vec::with_capacity(total_files);
+            for (i, f) in files.into_iter().enumerate() {
                 let ext = if f.haswebp == 1 { "webp" } else { infer_ext_from_name(&f.name).unwrap_or("jpg") };
                 let url = build_hitomi_url(&gg, &f.hash, ext);
                 image_urls.push(url);
-                if let Some(r) = reporter.as_ref() { r.inc(1); }
+                progress.update(i + 1, total_files, "正在解析图片链接");
             }
-            if image_urls.is_empty() { anyhow::bail!("没有生成任何图片URL"); }
+
+            if image_urls.is_empty() {
+                anyhow::bail!("没有生成任何图片URL");
+            }
+
+            progress.set_message("解析完成，准备下载");
+
             Ok(ParsedGallery { title: Some(title), image_urls, download_headers: {
                 let mut h = HeaderMap::new();
                 h.insert(REFERER, "https://hitomi.la/")?;

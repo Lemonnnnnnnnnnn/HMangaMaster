@@ -1,40 +1,13 @@
 use crate::progress::ProgressContext;
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::request::Client;
+use crate::crawler::parsers::common::RequestContext;
 use rr::HeaderMap;
 use rr::headers::common_headers::COOKIE;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-struct RequestContext {
-    client: Client,
-    headers: HeaderMap,
-    concurrency: usize,
-}
 
-impl Clone for RequestContext {
-    fn clone(&self) -> Self {
-        Self {
-            client: self.client.clone(),
-            headers: self.headers.clone(),
-            concurrency: self.concurrency,
-        }
-    }
-}
-
-impl RequestContext {
-    fn new(client: Client, headers: HeaderMap, concurrency: usize) -> Self {
-        Self { client, headers, concurrency }
-    }
-
-    async fn get_html(&self, url: &str) -> anyhow::Result<String> {
-        let resp = self.client.get_with_headers_rate_limited(url, &self.headers).await?;
-        if !resp.status().is_success() {
-            anyhow::bail!("状态码异常: {}", resp.status());
-        }
-        resp.text().await.map_err(Into::into)
-    }
-}
 
 pub struct EhentaiParser {
     concurrency: usize,
@@ -53,7 +26,7 @@ impl EhentaiParser {
     ) -> anyhow::Result<(Option<String>, Vec<String>)> {
         progress.set_message("正在获取专辑信息");
 
-        let html = request_ctx.get_html(url).await?;
+        let html = request_ctx.fetch_html(url).await?;
         let doc = scraper::Html::parse_document(&html);
 
         // 提取标题
