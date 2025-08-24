@@ -1,4 +1,4 @@
-use crate::crawler::progress::ProgressContext;
+use crate::progress::ProgressContext;
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::request::Client;
 use rr::HeaderMap;

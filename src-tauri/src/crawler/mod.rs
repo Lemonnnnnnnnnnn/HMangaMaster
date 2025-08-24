@@ -2,11 +2,11 @@ use serde::Serialize;
 use url::Url;
 
 use crate::request::Client;
+use crate::progress::ProgressReporter;
 use rr::HeaderMap;
 
 pub mod factory;
 pub mod parsers;
-pub mod progress;
 
 use std::sync::Arc;
 
@@ -18,13 +18,6 @@ pub struct ParsedGallery {
 	// 仅用于后端下载，不需要序列化给前端。
 	#[serde(skip)]
 	pub download_headers: Option<HeaderMap>,
-}
-
-// 解析阶段进度上报（取消 stage 概念，允许解析器直接设置任务名）
-pub trait ProgressReporter: Send + Sync {
-    fn set_total(&self, _total: usize) {}
-    fn inc(&self, _delta: usize) {}
-    fn set_task_name(&self, _name: &str) {}
 }
 
 // 解析器接口（统一为带 reporter 的单一方法，解析器可自由忽略 reporter）

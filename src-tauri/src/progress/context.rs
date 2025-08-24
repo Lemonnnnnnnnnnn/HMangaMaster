@@ -2,7 +2,7 @@
 //!
 //! 提供统一的进度报告和管理功能，封装了底层的进度报告器接口。
 
-use crate::crawler::ProgressReporter;
+use crate::progress::ProgressReporter;
 use std::sync::Arc;
 
 /// 进度管理上下文
@@ -58,5 +58,4 @@ impl ProgressContext {
             r.set_task_name(&format!("{} - {}", self.prefix, message));
         }
     }
-
 }

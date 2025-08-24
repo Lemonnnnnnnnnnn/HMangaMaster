@@ -9,6 +9,7 @@ mod request;
 mod download;
 mod task;
 mod crawler;
+mod progress;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

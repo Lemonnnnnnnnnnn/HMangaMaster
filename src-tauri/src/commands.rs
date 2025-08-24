@@ -7,6 +7,7 @@ use crate::download;
 use crate::history;
 use crate::library;
 use crate::logger;
+use crate::progress;
 use crate::task;
 
 use std::sync::Arc;
@@ -282,7 +283,7 @@ pub async fn task_start_crawl(
         .cancels
         .write()
         .insert(task_id.clone(), cancel_token.clone());
-    let reporter = Arc::new(crate::crawler::progress::TaskParseReporter::new(
+    let reporter = Arc::new(progress::TaskReporter::new(
         task_id.clone(),
         state.task_manager.clone(),
     ));
