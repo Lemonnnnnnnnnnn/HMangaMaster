@@ -39,7 +39,13 @@ impl Manager {
         Ok(())
     }
 
-    pub fn get_history(&self) -> Vec<DownloadTaskDTO> { self.download_history.clone() }
+    pub fn get_history(&self) -> Vec<DownloadTaskDTO> {
+        let mut history = self.download_history.clone();
+        // 倒序排列
+        history.sort_by_key(|d| d.complete_time.clone());
+        history.reverse();
+        history
+    }
     pub fn add_record(&mut self, d: DownloadTaskDTO) { self.download_history.push(d); let _ = self.save(); }
     pub fn clear(&mut self) { self.download_history.clear(); let _ = self.save(); }
 

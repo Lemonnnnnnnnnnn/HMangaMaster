@@ -1,6 +1,5 @@
 use crate::request::Client;
 use rr::HeaderMap;
-use std::time::Duration;
 
 /// 通用的请求上下文
 /// 封装了网络请求相关的配置，支持复用

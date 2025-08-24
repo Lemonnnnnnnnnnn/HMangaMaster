@@ -24,6 +24,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Button, TaskList } from '@/components';
 import { useRouter } from 'vue-router';
 import { ArrowLeft, Trash } from 'lucide-vue-next';
+import type { DownloadTaskDTO } from '@/types';
 
 const router = useRouter();
 
@@ -43,9 +44,8 @@ async function clearHistory() {
 }
 
 async function loadData() {
-    const history = await invoke<any[]>('history_get');
-    historyTasks.value = history
-    console.log(historyTasks)
+    const history = await invoke<DownloadTaskDTO[]>('history_get');
+    historyTasks.value = history;
 }
 
 onMounted(() => {
