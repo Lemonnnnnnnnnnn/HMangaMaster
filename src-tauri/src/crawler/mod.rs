@@ -18,6 +18,9 @@ pub struct ParsedGallery {
     // 仅用于后端下载，不需要序列化给前端。
     #[serde(skip)]
     pub download_headers: Option<HeaderMap>,
+    // 推荐的下载并发数，不设置则使用默认值
+    #[serde(skip)]
+    pub recommended_concurrency: Option<usize>,
 }
 
 // 解析器接口（统一为带 reporter 的单一方法，解析器可自由忽略 reporter）

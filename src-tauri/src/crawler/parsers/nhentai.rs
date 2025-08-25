@@ -89,6 +89,7 @@ impl SiteParser for NhentaiParser {
                 title,
                 image_urls,
                 download_headers: None,
+                recommended_concurrency: None,
             })
         })
     }

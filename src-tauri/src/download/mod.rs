@@ -13,7 +13,7 @@ impl Default for Config { fn default() -> Self { Self { retry_count: 3, retry_de
 pub struct Downloader { req: RequestClient, config: Config, default_headers: Option<HeaderMap> }
 
 impl Downloader {
-    pub fn new(req: RequestClient, config: Config) -> Self { Self { req, config, default_headers: None } }
+    // pub fn new(req: RequestClient, config: Config) -> Self { Self { req, config, default_headers: None } }
     pub fn new_with_headers(req: RequestClient, config: Config, headers: Option<HeaderMap>) -> Self { Self { req, config, default_headers: headers } }
 
     pub async fn download_file(&self, url: &str, file_path: &Path) -> anyhow::Result<()> {

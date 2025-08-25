@@ -79,8 +79,8 @@ impl TaskService {
         state.task_manager.read().set_name_and_path(&task_id, &name, &save_path);
         state.task_manager.read().set_status_downloading(&task_id, urls.len() as i32);
 
-        // 启动批量下载
-        let token = state.task_manager.read().start_batch(
+        // 启动批量下载，使用推荐并发数或默认值
+        let token = state.task_manager.read().start_batch_with_concurrency(
             app.clone(),
             task_id.clone(),
             urls,
@@ -88,6 +88,7 @@ impl TaskService {
             client,
             Some(cancel_token.clone()),
             parsed.download_headers,
+            parsed.recommended_concurrency,
         );
 
         // 更新取消令牌

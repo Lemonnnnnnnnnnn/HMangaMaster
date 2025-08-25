@@ -15,7 +15,7 @@ pub struct EhentaiParser {
 
 impl EhentaiParser {
     pub fn new() -> Self {
-        Self { concurrency: 5 }
+        Self { concurrency: 10 }
     }
 
     async fn discover_pages(
@@ -275,6 +275,7 @@ impl SiteParser for EhentaiParser {
                 title,
                 image_urls,
                 download_headers: None,
+                recommended_concurrency: None,
             })
         })
     }

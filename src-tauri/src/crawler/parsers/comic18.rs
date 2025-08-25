@@ -55,7 +55,7 @@ impl SiteParser for Comic18Parser {
 
             progress.set_message("解析完成，准备下载");
 
-            Ok(ParsedGallery { title, image_urls, download_headers: None })
+            Ok(ParsedGallery { title, image_urls, download_headers: None, recommended_concurrency: None })
         })
     }
 }

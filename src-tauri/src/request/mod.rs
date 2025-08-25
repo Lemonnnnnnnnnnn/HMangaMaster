@@ -1,4 +1,4 @@
-use rr::{HeaderMap, HttpClient, ClientBuilder, ProxyConfig, Response};
+use rr::{ClientBuilder, HeaderMap, HttpClient, ProxyConfig, Response};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
@@ -71,7 +71,12 @@ impl Client {
         let mut merged_headers = self.default_headers.clone();
         merged_headers.merge(headers);
 
-        Ok(self.http.get(url).headers_map(&merged_headers).send().await?)
+        Ok(self
+            .http
+            .get(url)
+            .headers_map(&merged_headers)
+            .send()
+            .await?)
     }
 
     // 返回一个设置了新并发上限的克隆客户端（不影响原实例）

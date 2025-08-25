@@ -158,6 +158,7 @@ impl SiteParser for WnacgParser {
                 title: title_opt,
                 image_urls,
                 download_headers: None,
+                recommended_concurrency: None,
             })
         })
     }

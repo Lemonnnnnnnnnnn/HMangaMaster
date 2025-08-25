@@ -57,7 +57,7 @@ impl SiteParser for TelegraphParser {
 
             progress.update(1, 1, "解析完成，准备下载");
 
-            Ok(ParsedGallery { title, image_urls: images, download_headers: None })
+            Ok(ParsedGallery { title, image_urls: images, download_headers: None, recommended_concurrency: None })
         })
     }
 }

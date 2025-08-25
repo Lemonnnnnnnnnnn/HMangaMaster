@@ -120,9 +120,23 @@ impl TaskManager {
         token_opt: Option<CancellationToken>,
         default_headers: Option<HeaderMap>,
     ) -> CancellationToken {
+        self.start_batch_with_concurrency(app, task_id, urls, paths, client, token_opt, default_headers, None)
+    }
+
+    pub fn start_batch_with_concurrency(
+        &self,
+        app: AppHandle,
+        task_id: String,
+        urls: Vec<String>,
+        paths: Vec<std::path::PathBuf>,
+        client: RequestClient,
+        token_opt: Option<CancellationToken>,
+        default_headers: Option<HeaderMap>,
+        concurrency_override: Option<usize>,
+    ) -> CancellationToken {
         use futures_util::stream;
         use futures_util::StreamExt;
-        let concurrency = self.download_concurrency;
+        let concurrency = concurrency_override.unwrap_or(self.download_concurrency);
         // 将请求客户端的限流与期望并发对齐，避免内部信号量限制导致并发达不到预期
         let client = client.with_limit(concurrency);
         let downloader =
