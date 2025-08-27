@@ -64,9 +64,7 @@ export class MangaService {
       // 并行加载所有图片，保持顺序
       const imagePromises = imagePaths.map(async (imagePath) => {
         try {
-          const url = await invoke<string>('library_get_image_data_url', { path: imagePath });
-          const realUrl = toImgSrc(url);
-          console.log({ url, realUrl })
+          const realUrl = toImgSrc(imagePath);
           return realUrl;
         } catch (error) {
           console.error(`加载图片失败: ${imagePath}`, error);

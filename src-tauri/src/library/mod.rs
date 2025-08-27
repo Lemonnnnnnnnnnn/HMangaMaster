@@ -1,5 +1,4 @@
 use serde::Serialize;
-use base64::Engine as _;
 use std::fs;
 use std::path::{Path};
 
@@ -70,13 +69,6 @@ impl Manager {
         });
     }
 
-    pub fn get_image_data_url(&self, path: &str) -> anyhow::Result<String> {
-        Ok(path.to_string())
-        // let data = std::fs::read(path)?;
-        // let mime = mime_guess::from_path(path).first_or_text_plain();
-        // let encoded = base64::engine::general_purpose::STANDARD.encode(data);
-        // Ok(format!("data:{};base64,{}", mime, encoded))
-    }
 
     pub fn delete_manga(&self, path: &str) -> anyhow::Result<bool> {
         if Path::new(path).exists() {

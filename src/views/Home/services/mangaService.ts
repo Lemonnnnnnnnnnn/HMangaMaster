@@ -42,9 +42,7 @@ export class MangaService {
       const imagePath = manga.previewImg;
       if (!imagePath) continue;
       if (!imageCache.has(imagePath)) {
-        const imageUrl = await invoke<string>('library_get_image_data_url', { path: imagePath });
-        const realUrl = toImgSrc(imageUrl);
-        console.log({ imageUrl, realUrl })
+        const realUrl = toImgSrc(imagePath);
         imageCache.set(imagePath, realUrl);
       }
     }

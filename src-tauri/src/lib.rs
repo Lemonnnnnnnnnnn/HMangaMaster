@@ -45,7 +45,6 @@ pub fn run() {
             commands::library_get_all_mangas,
             commands::library_get_manga_images,
             commands::library_delete_manga,
-            commands::library_get_image_data_url,
             // history
             commands::history_get,
             commands::history_add,

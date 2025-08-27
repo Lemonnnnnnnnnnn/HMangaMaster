@@ -68,16 +68,16 @@ fn parse_image_url_pattern(first_src: &str, first_name: &str) -> Option<(String,
         let remaining = &first_src[name_pos + first_name.len()..];
 
         tracing::debug!("找到名称位置: name_pos={}, prefix='{}', remaining='{}'", name_pos, prefix, remaining);
-
+        Some((prefix, ".webp".to_string()))
         // 查找扩展名（通常是 .webp, .jpg, .png 等）
-        if let Some(ext_start) = remaining.find('.') {
-            let ext = remaining[ext_start..].to_string();
-            tracing::debug!("解析成功: prefix='{}', extension='{}'", prefix, ext);
-            Some((prefix, ext))
-        } else {
-            tracing::warn!("在剩余部分 '{}' 中未找到扩展名", remaining);
-            None
-        }
+        // if let Some(ext_start) = remaining.find('.') {
+        //     let ext = remaining[ext_start..].to_string();
+        //     tracing::debug!("解析成功: prefix='{}', extension='{}'", prefix, ext);
+        //     Some((prefix, ext))
+        // } else {
+        //     tracing::warn!("在剩余部分 '{}' 中未找到扩展名", remaining);
+        //     None
+        // }
     } else {
         tracing::warn!("在URL '{}' 中未找到名称 '{}'", first_src, first_name);
         None

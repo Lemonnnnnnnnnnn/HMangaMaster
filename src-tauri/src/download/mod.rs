@@ -30,7 +30,7 @@ impl Downloader {
                 Ok(resp) => {
                     let status = resp.status();
                     if !status.is_success() {
-                        warn!(attempt = attempt + 1, status = %status, "response is not successful");
+                        warn!(attempt = attempt + 1, status = %status, url = %url, "response is not successful");
                         last_err = Some(anyhow::anyhow!("bad status: {}", status));
                         continue;
                     }

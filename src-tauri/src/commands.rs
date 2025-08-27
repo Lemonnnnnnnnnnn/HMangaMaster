@@ -141,12 +141,6 @@ pub fn library_delete_manga(_state: State<AppState>, path: String) -> Result<boo
     mgr.delete_manga(&path).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn library_get_image_data_url(_state: State<AppState>, path: String) -> Result<String, String> {
-    let mgr = library::Manager::default();
-    mgr.get_image_data_url(&path).map_err(|e| e.to_string())
-}
-
 // ---------- history ----------
 #[tauri::command]
 pub fn history_get(
