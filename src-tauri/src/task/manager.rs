@@ -110,19 +110,6 @@ impl TaskManager {
             .retain(|_, t| t.status == TaskStatus::Running || t.status == TaskStatus::Parsing)
     }
 
-    pub fn start_batch(
-        &self,
-        app: AppHandle,
-        task_id: String,
-        urls: Vec<String>,
-        paths: Vec<std::path::PathBuf>,
-        client: RequestClient,
-        token_opt: Option<CancellationToken>,
-        default_headers: Option<HeaderMap>,
-    ) -> CancellationToken {
-        self.start_batch_with_concurrency(app, task_id, urls, paths, client, token_opt, default_headers, None)
-    }
-
     pub fn start_batch_with_concurrency(
         &self,
         app: AppHandle,

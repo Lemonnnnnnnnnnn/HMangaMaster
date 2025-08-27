@@ -87,7 +87,7 @@ pub fn url_from_url(gg: &GGRust, url: &str, base: Option<&str>, dir: Option<&str
 /// 从hash生成URL，对应JavaScript: url_from_hash
 pub fn url_from_hash(
     gg: &GGRust,
-    galleryid: &str,
+    _galleryid: &str,
     image: &Image,
     dir: Option<&str>,
     ext: Option<&str>,
