@@ -16,3 +16,4 @@ export const throttle = (func: Function, wait: number) => {
         }
     };
 }
+

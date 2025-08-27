@@ -4,6 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { useMangaStore } from '../stores';
 import { ProgressService } from './progressService';
 import type { ScrollService } from './scrollService';
+import { resolveResource } from '@tauri-apps/api/path';
+import { toImgSrc } from '@/utils';
 
 export class MangaService {
   private router: ReturnType<typeof useRouter>;
@@ -62,7 +64,10 @@ export class MangaService {
       // 并行加载所有图片，保持顺序
       const imagePromises = imagePaths.map(async (imagePath) => {
         try {
-          return await invoke<string>('library_get_image_data_url', { path: imagePath });
+          const url = await invoke<string>('library_get_image_data_url', { path: imagePath });
+          const realUrl = toImgSrc(url);
+          console.log({ url, realUrl })
+          return realUrl;
         } catch (error) {
           console.error(`加载图片失败: ${imagePath}`, error);
           return null;

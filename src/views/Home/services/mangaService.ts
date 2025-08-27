@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { Manga } from '../stores/homeStore';
 import { useHomeStore } from '../stores/homeStore';
+import { resolveResource } from '@tauri-apps/api/path';
+import { toImgSrc } from '@/utils';
 
 export class MangaService {
   private homeStore: ReturnType<typeof useHomeStore>;
@@ -41,7 +43,9 @@ export class MangaService {
       if (!imagePath) continue;
       if (!imageCache.has(imagePath)) {
         const imageUrl = await invoke<string>('library_get_image_data_url', { path: imagePath });
-        imageCache.set(imagePath, imageUrl);
+        const realUrl = toImgSrc(imageUrl);
+        console.log({ imageUrl, realUrl })
+        imageCache.set(imagePath, realUrl);
       }
     }
     this.homeStore.mangaImages = imageCache;
