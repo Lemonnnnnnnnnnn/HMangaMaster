@@ -74,7 +74,7 @@ export class ScrollService {
                     this.mangaStore.selectedImages.length,
                 );
             }
-        }, 1000); // 1秒防抖
+        }, 100); 
     }
 }
 
