@@ -79,6 +79,33 @@ impl Client {
             .await?)
     }
 
+    // 带并发限制的 POST 请求
+    pub async fn post_with_headers_rate_limited(
+        &self,
+        url: &str,
+        headers: &HeaderMap,
+        body: String,
+    ) -> anyhow::Result<Response> {
+        let _permit = self
+            .limiter
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| anyhow::anyhow!("semaphore closed"))?;
+
+        // 合并默认请求头和额外请求头
+        let mut merged_headers = self.default_headers.clone();
+        merged_headers.merge(headers);
+
+        Ok(self
+            .http
+            .post(url)
+            .headers_map(&merged_headers)
+            .body(body)
+            .send()
+            .await?)
+    }
+
     // 返回一个设置了新并发上限的克隆客户端（不影响原实例）
     pub fn with_limit(&self, permits: usize) -> Self {
         Self {
