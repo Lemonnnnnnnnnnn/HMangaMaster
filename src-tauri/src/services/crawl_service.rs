@@ -4,7 +4,7 @@ use tokio_util::sync::CancellationToken;
 use crate::crawler;
 use crate::download;
 use crate::progress;
-use crate::request::Client;
+use crate::request::{RequestClient, Client};
 use crate::task::manager::TaskManager;
 
 /// 爬虫服务错误类型

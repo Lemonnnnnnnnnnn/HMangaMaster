@@ -1,7 +1,7 @@
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::progress::ProgressContext;
 use crate::request::Client;
-use rr::HeaderMap;
+use reqwest::header::HeaderMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -116,14 +116,14 @@ impl SiteParser for WnacgParser {
             // 使用限流请求
             let client_limited = client.with_limit(3); // 降低并发限制
             let mut headers = HeaderMap::new();
-            let _ = headers.insert("Referer", "https://www.wnacg.com/");
+            let _ = headers.insert("Referer", "https://www.wnacg.com/".parse().unwrap());
             let first = client_limited
                 .get_with_headers_rate_limited(url, &headers)
                 .await?;
             if !first.status().is_success() {
                 anyhow::bail!("状态码异常: {}", first.status());
             }
-            let html = first.text().await?;
+            let html: String = first.text().await?;
             let (title_opt, mut page_urls): (Option<String>, Vec<String>) = {
                 let doc = scraper::Html::parse_document(&html);
                 let title = {
@@ -168,7 +168,7 @@ impl SiteParser for WnacgParser {
 
                             let mut local: Vec<MangaDetail> = vec![];
                             let mut headers_cloned = HeaderMap::new();
-                            let _ = headers_cloned.insert("Referer", base_url.as_str());
+                            let _ = headers_cloned.insert("Referer", base_url.as_str().parse().unwrap());
 
                             if let Ok(resp) = client_cloned
                                 .get_with_headers_rate_limited(&p, &headers_cloned)
@@ -239,7 +239,7 @@ impl SiteParser for WnacgParser {
             tracing::info!("访问第一个漫画详情页: name='{}', url='{}'", first_detail.name, first_detail.detail_url);
 
             let mut headers_cloned = HeaderMap::new();
-            let _ = headers_cloned.insert("Referer", first_detail.detail_url.as_str());
+            let _ = headers_cloned.insert("Referer", first_detail.detail_url.as_str().parse().unwrap());
 
             let first_resp = client_limited
                 .get_with_headers_rate_limited(&first_detail.detail_url, &headers_cloned)
@@ -249,7 +249,7 @@ impl SiteParser for WnacgParser {
                 anyhow::bail!("访问详情页失败: {}", first_resp.status());
             }
 
-            let first_html = first_resp.text().await?;
+            let first_html: String = first_resp.text().await?;
             let first_doc = scraper::Html::parse_document(&first_html);
             tracing::debug!("成功获取第一个详情页HTML内容，长度: {}", first_html.len());
 

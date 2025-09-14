@@ -2,8 +2,7 @@ use crate::crawler::parsers::common::RequestContext;
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::progress::ProgressContext;
 use crate::request::Client;
-use rr::headers::common_headers::REFERER;
-use rr::HeaderMap;
+use reqwest::header::{HeaderMap, REFERER};
 
 use super::gg_parser::parse_gg_constants_rust;
 use super::url_from_url_from_hash::{url_from_url_from_hash, Image};
@@ -99,7 +98,7 @@ impl SiteParser for HitomiParser {
                 image_urls,
                 download_headers: {
                     let mut h = HeaderMap::new();
-                    h.insert(REFERER, "https://hitomi.la/")?;
+                    h.insert(REFERER, "https://hitomi.la/".parse()?);
                     Some(h)
                 },
                 recommended_concurrency: Some(4),

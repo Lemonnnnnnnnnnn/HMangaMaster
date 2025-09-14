@@ -1,7 +1,7 @@
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::progress::ProgressContext;
 use crate::request::Client;
-use rr::HeaderMap;
+use reqwest::header::HeaderMap;
 use regex::Regex;
 use url::form_urlencoded;
 
@@ -52,7 +52,7 @@ impl SiteParser for NhentaiParser {
             let resp = client_limited
                 .get_with_headers_rate_limited(url, &headers)
                 .await?;
-            let html = resp.text().await?;
+            let html: String = resp.text().await?;
 
             // 解析HTML并提取数据
             let (title, thumbs, api_params) = parse_html_content(&html);
@@ -304,8 +304,8 @@ async fn get_more_images_from_api_with_params(
 
     // 设置请求头
     let mut headers = HeaderMap::new();
-    headers.insert("Content-Type", "application/x-www-form-urlencoded")?;
-    headers.insert("X-Requested-With", "XMLHttpRequest")?;
+    headers.insert("Content-Type", "application/x-www-form-urlencoded".parse()?);
+    headers.insert("X-Requested-With", "XMLHttpRequest".parse()?);
 
     // 发送POST请求
     let resp = client

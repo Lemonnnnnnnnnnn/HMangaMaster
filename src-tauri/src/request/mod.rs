@@ -1,28 +1,31 @@
-use rr::{ClientBuilder, HeaderMap, HttpClient, ProxyConfig, Response};
+use reqwest::{Client as ReqwestClient, ClientBuilder, header::HeaderMap, Proxy, Response};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
+// 为了保持向后兼容性，提供一个类型别名
+pub type Client = RequestClient;
+
 #[derive(Clone)]
-pub struct Client {
-    http: HttpClient,
+pub struct RequestClient {
+    http: ReqwestClient,
     default_headers: HeaderMap,
     limiter: Arc<Semaphore>,
 }
 
 const DEFAULT_CONCURRENCY: usize = 10;
 
-impl Client {
+impl RequestClient {
     pub fn new(proxy_url: Option<String>) -> anyhow::Result<Self> {
         let mut headers = HeaderMap::new();
-        headers.insert("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")?;
-        headers.insert("accept-language", "en,zh-CN;q=0.9,zh;q=0.8")?;
-        headers.insert("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")?;
+        headers.insert("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7".parse()?);
+        headers.insert("accept-language", "en,zh-CN;q=0.9,zh;q=0.8".parse()?);
+        headers.insert("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".parse()?);
 
         let mut builder = ClientBuilder::new().default_headers(headers.clone());
 
         if let Some(p) = proxy_url.filter(|s| !s.is_empty()) {
-            let proxy_config = ProxyConfig::from_url(&p)?;
-            builder = builder.proxy(proxy_config);
+            let proxy = Proxy::all(&p)?;
+            builder = builder.proxy(proxy);
         }
 
         let http = builder.build()?;
@@ -69,12 +72,14 @@ impl Client {
 
         // 合并默认请求头和额外请求头
         let mut merged_headers = self.default_headers.clone();
-        merged_headers.merge(headers);
+        for (key, value) in headers.iter() {
+            merged_headers.insert(key, value.clone());
+        }
 
         Ok(self
             .http
             .get(url)
-            .headers_map(&merged_headers)
+            .headers(merged_headers)
             .send()
             .await?)
     }
@@ -95,12 +100,14 @@ impl Client {
 
         // 合并默认请求头和额外请求头
         let mut merged_headers = self.default_headers.clone();
-        merged_headers.merge(headers);
+        for (key, value) in headers.iter() {
+            merged_headers.insert(key, value.clone());
+        }
 
         Ok(self
             .http
             .post(url)
-            .headers_map(&merged_headers)
+            .headers(merged_headers)
             .body(body)
             .send()
             .await?)

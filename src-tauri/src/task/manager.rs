@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 use crate::download::{Config as DownloadConfig, Downloader};
 use crate::history;
 use crate::request::Client as RequestClient;
-use rr::HeaderMap;
+use reqwest::header::HeaderMap;
 
 use super::{Progress, Task, TaskStatus};
 

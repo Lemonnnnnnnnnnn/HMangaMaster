@@ -3,7 +3,7 @@ use url::Url;
 
 use crate::progress::ProgressReporter;
 use crate::request::Client;
-use rr::HeaderMap;
+use reqwest::header::HeaderMap;
 
 pub mod factory;
 pub mod parsers;

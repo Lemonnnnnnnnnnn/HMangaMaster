@@ -2,7 +2,7 @@ use std::path::{Path};
 use tokio::io::AsyncWriteExt;
 
 use crate::request::Client as RequestClient;
-use rr::HeaderMap;
+use reqwest::header::HeaderMap;
 use tracing::{error, warn};
 
 #[derive(Clone)]
@@ -37,16 +37,8 @@ impl Downloader {
                     // 将流写入文件的过程放入单独分支，错误不直接返回函数，而是记录并进入下一次重试
                     let write_res = async {
                         let mut file = tokio::fs::File::create(file_path).await?;
-                        let mut stream = resp.bytes_stream();
-                        use futures_util::StreamExt;
-                        while let Some(chunk) = stream.next().await {
-                            match chunk {
-                                Ok(data) => {
-                                    if let Err(e) = file.write_all(&data).await { return Err::<(), anyhow::Error>(e.into()); }
-                                }
-                                Err(e) => { return Err::<(), anyhow::Error>(e.into()); }
-                            }
-                        }
+                        let bytes = resp.bytes().await?;
+                        if let Err(e) = file.write_all(&bytes).await { return Err::<(), anyhow::Error>(e.into()); }
                         Ok::<(), anyhow::Error>(())
                     }.await;
                     match write_res {

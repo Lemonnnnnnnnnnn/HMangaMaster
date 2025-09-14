@@ -2,8 +2,7 @@ use crate::progress::ProgressContext;
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::request::Client;
 use crate::crawler::parsers::common::RequestContext;
-use rr::HeaderMap;
-use rr::headers::common_headers::COOKIE;
+use reqwest::header::{HeaderMap, COOKIE};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -250,7 +249,7 @@ impl SiteParser for EhentaiParser {
             // 创建上下文对象
             let client = client.with_limit(self.concurrency);
             let mut headers = HeaderMap::new();
-            headers.insert(COOKIE, "nw=1")?;
+            headers.insert(COOKIE, "nw=1".parse()?);
 
             let request_ctx = RequestContext::new(client, headers, self.concurrency);
             let progress = ProgressContext::new(reporter, "EHentai".to_string());

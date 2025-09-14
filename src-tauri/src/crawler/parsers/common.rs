@@ -1,11 +1,11 @@
-use crate::request::Client;
-use rr::HeaderMap;
+use crate::request::{RequestClient, Client};
+use reqwest::header::HeaderMap;
 
 /// 通用的请求上下文
 /// 封装了网络请求相关的配置，支持复用
 #[derive(Clone)]
 pub struct RequestContext {
-    pub client: Client,
+    pub client: RequestClient,
     pub headers: HeaderMap,
     pub concurrency: usize,
 }
