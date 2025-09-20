@@ -35,6 +35,10 @@ pub fn run() {
             commands::config_set_proxy,
             commands::config_get_libraries,
             commands::config_add_library,
+            commands::config_get_parser_config,
+            commands::config_set_parser_config,
+            commands::config_get_all_parser_configs,
+            commands::config_get_config_path,
             // logger
             commands::logger_get_info,
             // library

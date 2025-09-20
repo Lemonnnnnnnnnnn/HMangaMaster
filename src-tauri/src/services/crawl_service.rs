@@ -4,7 +4,7 @@ use tokio_util::sync::CancellationToken;
 use crate::crawler;
 use crate::download;
 use crate::progress;
-use crate::request::{RequestClient, Client};
+use crate::request::Client;
 use crate::task::manager::TaskManager;
 
 /// 爬虫服务错误类型
@@ -31,6 +31,7 @@ impl std::error::Error for CrawlError {}
 pub struct CrawlService;
 
 impl CrawlService {
+
     /// 解析并验证URL
     pub async fn parse_and_validate(
         client: &Client,
@@ -38,6 +39,7 @@ impl CrawlService {
         task_id: &str,
         task_manager: &Arc<parking_lot::RwLock<TaskManager>>,
         cancel_token: &CancellationToken,
+        app_state: Option<&crate::app::AppState>,
     ) -> Result<crawler::ParsedGallery, CrawlError> {
         // 创建进度报告器
         let reporter = Arc::new(progress::TaskReporter::new(
@@ -49,7 +51,7 @@ impl CrawlService {
         let parsed = tokio::select! {
             biased;
             _ = cancel_token.cancelled() => return Err(CrawlError::Cancelled),
-            res = crawler::parse_gallery_auto(client, url, Some(reporter)) => {
+            res = crawler::parse_gallery_auto(client, url, Some(reporter), app_state) => {
                 res.map_err(|e| CrawlError::ParseFailed(e.to_string()))?
             }
         };

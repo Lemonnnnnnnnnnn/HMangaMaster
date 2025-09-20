@@ -14,6 +14,7 @@ impl HitomiParser {
     pub fn new() -> Self {
         Self
     }
+
 }
 
 impl SiteParser for HitomiParser {
@@ -30,6 +31,7 @@ impl SiteParser for HitomiParser {
         client: &'a Client,
         url: &'a str,
         reporter: Option<std::sync::Arc<dyn ProgressReporter>>,
+        app_state: Option<&'a crate::app::AppState>,
     ) -> core::pin::Pin<
         Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>,
     > {
@@ -39,8 +41,19 @@ impl SiteParser for HitomiParser {
 
             let id = extract_id(url).ok_or_else(|| anyhow::anyhow!("无法从 URL 提取 ID"))?;
 
-            // 创建RequestContext
-            let request_ctx = RequestContext::with_concurrency(client.clone(), 3);
+            // 从配置中获取 parser 配置
+            let parser_config = if let Some(state) = app_state {
+                Some(state.config.read().parser_config.get_config("hitomi"))
+            } else {
+                None
+            };
+
+            // 使用配置中的并发数
+            let concurrency = parser_config
+                .map(|config| config.base.concurrency)
+                .flatten()
+                .unwrap_or(3);
+            let request_ctx = RequestContext::with_concurrency(client.clone(), concurrency);
 
             // 获取galleryinfo
             let gi_url = format!(

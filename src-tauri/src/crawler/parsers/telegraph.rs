@@ -5,18 +5,34 @@ use crate::crawler::parsers::common::{RequestContext, url_utils};
 
 pub struct TelegraphParser;
 
-impl TelegraphParser { pub fn new() -> Self { Self } }
+impl TelegraphParser {
+    pub fn new() -> Self {
+        Self
+    }
+
+}
 
 impl SiteParser for TelegraphParser {
     fn name(&self) -> &'static str { "telegraph" }
     fn domains(&self) -> &'static [&'static str] { &["telegra.ph"] }
-    fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
+    fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>, app_state: Option<&'a crate::app::AppState>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
         Box::pin(async move {
             // 创建ProgressContext
             let progress = ProgressContext::new(reporter, "Telegraph".to_string());
 
-            // 创建RequestContext
-            let request_ctx = RequestContext::with_concurrency(client.clone(), 3);
+            // 从配置中获取 parser 配置
+            let parser_config = if let Some(state) = app_state {
+                Some(state.config.read().parser_config.get_config("telegraph"))
+            } else {
+                None
+            };
+
+            // 使用配置中的并发数
+            let concurrency = parser_config
+                .map(|config| config.base.concurrency)
+                .flatten()
+                .unwrap_or(3);
+            let request_ctx = RequestContext::with_concurrency(client.clone(), concurrency);
 
             // 获取HTML内容
             let html = request_ctx.fetch_html(url).await?;

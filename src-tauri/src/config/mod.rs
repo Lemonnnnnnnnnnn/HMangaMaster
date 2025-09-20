@@ -3,17 +3,33 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Manager as TauriManager;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub mod parser_config;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub libraries: Vec<String>,
     pub output_dir: String,
     pub proxy_url: String,
     pub active_library: String,
+    pub parser_configs: Option<std::collections::HashMap<String, parser_config::ParserConfig>>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            libraries: Vec::new(),
+            output_dir: String::new(),
+            proxy_url: String::new(),
+            active_library: String::new(),
+            parser_configs: None,
+        }
+    }
 }
 
 pub struct Manager {
     pub config: Config,
     pub config_path: PathBuf,
+    pub parser_config: parser_config::ParserConfigManager,
 }
 
 impl Default for Manager {
@@ -21,6 +37,7 @@ impl Default for Manager {
         Self {
             config: Config::default(),
             config_path: Default::default(),
+            parser_config: parser_config::ParserConfigManager::new(),
         }
     }
 }
@@ -35,13 +52,27 @@ impl Manager {
         if self.config_path.exists() {
             let data = fs::read_to_string(&self.config_path)?;
             self.config = serde_json::from_str(&data).unwrap_or_default();
+
+            // 从持久化配置初始化 ParserConfigManager
+            if let Some(parser_configs) = &self.config.parser_configs {
+                for (name, config) in parser_configs {
+                    self.parser_config.set_config(name, config.clone());
+                }
+            }
         } else {
             self.save()?;
         }
         Ok(())
     }
 
-    pub fn save(&self) -> anyhow::Result<()> {
+    pub fn save(&mut self) -> anyhow::Result<()> {
+        // 从 ParserConfigManager 获取最新配置并同步到 Config
+        let mut parser_configs = self.config.parser_configs.take().unwrap_or_default();
+        for (name, config) in self.parser_config.get_all_configs() {
+            parser_configs.insert(name.clone(), config.clone());
+        }
+        self.config.parser_configs = Some(parser_configs);
+
         if let Some(parent) = self.config_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -74,12 +105,23 @@ impl Manager {
         self.config.proxy_url = proxy;
         self.save()
     }
+
+    // Parser 配置相关方法 - 自动持久化
+    pub fn set_parser_config_auto_save(&mut self, parser_name: &str, config: parser_config::ParserConfig) -> anyhow::Result<()> {
+        self.parser_config.set_config(parser_name, config);
+        self.save()
+    }
+
     pub fn add_library(&mut self, dir: String) -> anyhow::Result<()> {
         if !self.config.libraries.iter().any(|d| d == &dir) {
             self.config.libraries.push(dir);
             self.save()?;
         }
         Ok(())
+    }
+
+    pub fn get_config_path(&self) -> String {
+        self.config_path.to_string_lossy().to_string()
     }
 }
 

@@ -15,6 +15,7 @@ impl PixivParser {
         Self
     }
 
+
     // 设置 Pixiv 特定的请求头和 cookies
     fn create_pixiv_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -31,10 +32,6 @@ impl PixivParser {
         headers
     }
 
-    // 获取 Pixiv 特定的 cookies
-    fn get_pixiv_cookies(&self) -> &'static str {
-        "first_visit_datetime_pc=2025-08-01%2021%3A11%3A23; p_ab_id=0; p_ab_id_2=5; p_ab_d_id=1185013192; yuid_b=N5cWMpg; PHPSESSID=39872424_qlqlIzTqNRmt7pLdmC77DGS3lylcrEBt; device_token=69a0afe143710692e8d1b566a0845948; c_type=26; privacy_policy_notification=0; a_type=0; b_type=1; privacy_policy_agreement=0; __cf_bm=b3fZXYQGLWWr_djvedcFnx6g8mSpqI_7QGG5cDER2GM-1758333122-1.0.1.1-hnW8BlJ_DpJTEzWNj.xUR2FmdpZeFlJ7rMMn6FC.c8FZmnSF9SErhRU.6283OIYwML.KR3BwwK_NpJqtKKs0HeCDZ8DPDXtldX7Q92bWSEyhS81x_4WPonm_sin1wNjB; _cfuvid=N735SX8oxaD5kcjDMvF5By.jmtPrgDxOxh41KPEk0y4-1758333122059-0.0.1.1-604800000; privacy_policy_agreement=7; cf_clearance=zUY4WNFr9g7D.csdp.infd8OZSUgvtEU9bgyAPTDEYc-1758333123-1.2.1.1-UBXfbDbkjwGkx8u6S8wLk7nbZE7vFVxphtqLnKs9c664rU0Y9OUZohyoSka8M7lSIoLy5EmEcWNoMyCgLkZGhN8xDA8lxYzwPQNWBM4HlgX.YUYe.yVUqLoLxiG9eqt2XY6lmRCyOZDqs.eM75DTyY7NEeVywhvujT0xlz1GH54VOtTY0gUE6QCIxjfqiTT1Kzi71iKbBKgOCqQ7eAxuvYUHMRlWmTyEcDOFVC6cpzE"
-    }
 
     // 从 URL 中提取作品 ID
     fn extract_artwork_id(&self, url: &str) -> anyhow::Result<String> {
@@ -64,6 +61,7 @@ impl SiteParser for PixivParser {
         client: &'a Client,
         url: &'a str,
         reporter: Option<std::sync::Arc<dyn ProgressReporter>>,
+        app_state: Option<&'a crate::app::AppState>,
     ) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
         Box::pin(async move {
             // 创建进度上下文
@@ -74,10 +72,23 @@ impl SiteParser for PixivParser {
 
             // 创建请求上下文，设置并发数为 1（避免请求过于频繁）
             let mut headers = self.create_pixiv_headers();
-            headers.insert(
-                COOKIE,
-                HeaderValue::from_static(self.get_pixiv_cookies())
-            );
+
+            // 从配置中获取 parser 配置
+            let parser_config = if let Some(state) = app_state {
+                Some(state.config.read().parser_config.get_config("pixiv"))
+            } else {
+                None
+            };
+
+            let cookies = parser_config
+                .map(|config| config.auth)
+                .flatten()
+                .and_then(|auth| auth.cookies)
+                .unwrap_or_default();
+
+            if !cookies.is_empty() {
+                headers.insert(COOKIE, HeaderValue::from_str(&cookies)?);
+            }
 
             let request_ctx = RequestContext::new(client.clone(), headers, 1);
 

@@ -8,14 +8,13 @@ use std::sync::Arc;
 
 
 
-pub struct EhentaiParser {
-    concurrency: usize,
-}
+pub struct EhentaiParser;
 
 impl EhentaiParser {
     pub fn new() -> Self {
-        Self { concurrency: 10 }
+        Self
     }
+
 
     async fn discover_pages(
         &self,
@@ -242,16 +241,28 @@ impl SiteParser for EhentaiParser {
         client: &'a Client,
         url: &'a str,
         reporter: Option<std::sync::Arc<dyn ProgressReporter>>,
+        app_state: Option<&'a crate::app::AppState>,
     ) -> core::pin::Pin<
         Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>,
     > {
         Box::pin(async move {
-            // 创建上下文对象
-            let client = client.with_limit(self.concurrency);
+            // 从配置中获取 parser 配置
+            let parser_config = if let Some(state) = app_state {
+                Some(state.config.read().parser_config.get_config("ehentai"))
+            } else {
+                None
+            };
+
+            // 使用配置中的并发数
+            let concurrency = parser_config
+                .map(|config| config.base.concurrency)
+                .flatten()
+                .unwrap_or(10);
+            let client_limited = client.with_limit(concurrency);
             let mut headers = HeaderMap::new();
             headers.insert(COOKIE, "nw=1".parse()?);
 
-            let request_ctx = RequestContext::new(client, headers, self.concurrency);
+            let request_ctx = RequestContext::new(client_limited, headers, concurrency);
             let progress = ProgressContext::new(reporter, "EHentai".to_string());
 
             // 1. 发现所有页面

@@ -38,6 +38,7 @@ pub trait SiteParser: Send + Sync {
         client: &'a Client,
         url: &'a str,
         reporter: Option<Arc<dyn ProgressReporter>>,
+        app_state: Option<&'a crate::app::AppState>,
     ) -> core::pin::Pin<
         Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>,
     >;
@@ -57,6 +58,7 @@ pub async fn parse_gallery_auto(
     client: &Client,
     url: &str,
     reporter: Option<Arc<dyn ProgressReporter>>,
+    app_state: Option<&crate::app::AppState>,
 ) -> anyhow::Result<ParsedGallery> {
     ensure_builtin_registered();
     let parsed = url
@@ -65,7 +67,7 @@ pub async fn parse_gallery_auto(
     let host = parsed.host_str().unwrap_or("").to_string();
     if let Some(site) = factory::detect_site_type_by_host(&host) {
         if let Some(parser) = factory::create_for_site(site) {
-            return parser.parse(client, url, reporter).await;
+            return parser.parse(client, url, reporter, app_state).await;
         }
     }
     anyhow::bail!("未匹配到任何站点解析器，请检查 URL 或稍后重试")

@@ -20,6 +20,7 @@ impl NhentaiParser {
     pub fn new() -> Self {
         Self
     }
+
 }
 
 impl SiteParser for NhentaiParser {
@@ -34,6 +35,7 @@ impl SiteParser for NhentaiParser {
         client: &'a Client,
         url: &'a str,
         reporter: Option<std::sync::Arc<dyn ProgressReporter>>,
+        app_state: Option<&'a crate::app::AppState>,
     ) -> core::pin::Pin<
         Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>,
     > {
@@ -45,9 +47,20 @@ impl SiteParser for NhentaiParser {
             let gallery_id = extract_gallery_id(url)?;
             tracing::debug!("提取到画廊ID: {}", gallery_id);
 
-            // 使用限流请求
+            // 从配置中获取 parser 配置
+            let parser_config = if let Some(state) = app_state {
+                Some(state.config.read().parser_config.get_config("nhentai"))
+            } else {
+                None
+            };
+
+            // 使用配置中的并发数
+            let concurrency = parser_config
+                .map(|config| config.base.concurrency)
+                .flatten()
+                .unwrap_or(5);
             let headers = HeaderMap::new();
-            let client_limited = client.with_limit(5); // 设置并发限制
+            let client_limited = client.with_limit(concurrency);
 
             let resp = client_limited
                 .get_with_headers_rate_limited(url, &headers)

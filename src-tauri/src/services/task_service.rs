@@ -62,6 +62,7 @@ impl TaskService {
             &task_id,
             &state.task_manager,
             &cancel_token,
+            Some(state),
         ).await {
             Ok(p) => p,
             Err(e) => {

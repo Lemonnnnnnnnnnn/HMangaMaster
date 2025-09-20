@@ -30,9 +30,17 @@
         </div>
 
         <div class="flex flex-col gap-4">
+            <div class="text-xl">Pixiv 设置</div>
+            <div class="flex gap-4">
+                <Input @blur="savePixivConfig" class="flex-1" v-model="pixivCookies" placeholder="请输入 Pixiv cookies" />
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-4">
             <div class="text-xl">日志</div>
             <div class="flex flex-col gap-2 text-neutral-300/90">
                 <div>目录：<span class="select-all">{{ logInfo?.dir || '-' }}</span></div>
+                <div>配置文件：<span class="select-all">{{ configPath || '-' }}</span></div>
             </div>
         </div>
     </div>
@@ -40,7 +48,7 @@
 
 <script setup lang="ts">
 import { Input } from '@/components';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'vue-sonner';
 import { debounce } from '@/utils';
@@ -50,6 +58,17 @@ let downloadDir = ref("")
 let libraries = ref<string[]>([])
 let activeLibrary = ref("")
 let logInfo = ref<any>(null)
+let pixivConfig = ref<any>(null)
+let configPath = ref("")
+
+const pixivCookies = computed({
+    get() {
+        return pixivConfig.value?.auth?.cookies || ''
+    },
+    set(value: string) {
+        pixivConfig.value.auth.cookies = value
+    }
+})
 
 const saveProxy = debounce((e: Event) => {
     invoke('config_set_proxy', { proxy: (e.target as HTMLInputElement).value }).then(() => {
@@ -57,11 +76,37 @@ const saveProxy = debounce((e: Event) => {
     })
 }, 1000)
 
+const savePixivConfig = debounce(async () => {
+    // 如果没有 pixivConfig，创建一个默认的
+    if (!pixivConfig.value) {
+        pixivConfig.value = {
+            base: { concurrency: 3 },
+            auth: { cookies: '' },
+            site_specific: null
+        }
+    }
+
+    await invoke('config_set_parser_config', {
+        parserName: 'pixiv',
+        config: pixivConfig.value
+    });
+    refreshConfig();
+}, 1000)
+
+
 async function refreshConfig() {
     proxyUrl.value = await invoke<string>('config_get_proxy');
     downloadDir.value = await invoke<string>('config_get_output_dir');
     libraries.value = await invoke<string[]>('config_get_libraries');
     activeLibrary.value = await invoke<string>('config_get_active_library');
+    configPath.value = await invoke<string>('config_get_config_path');
+
+    try {
+        pixivConfig.value = await invoke<any>('config_get_parser_config', { parserName: 'pixiv' });
+    } catch (e) {
+        pixivConfig.value = null;
+    }
+
     try {
         logInfo.value = await invoke<any>('logger_get_info');
     } catch (e) {

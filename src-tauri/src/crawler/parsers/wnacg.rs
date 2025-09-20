@@ -90,6 +90,7 @@ impl WnacgParser {
     pub fn new() -> Self {
         Self
     }
+
 }
 
 impl SiteParser for WnacgParser {
@@ -104,6 +105,7 @@ impl SiteParser for WnacgParser {
         client: &'a Client,
         url: &'a str,
         reporter: Option<std::sync::Arc<dyn ProgressReporter>>,
+        app_state: Option<&'a crate::app::AppState>,
     ) -> core::pin::Pin<
         Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>,
     > {
@@ -113,8 +115,20 @@ impl SiteParser for WnacgParser {
             // 创建ProgressContext
             let progress = ProgressContext::new(reporter, "Wnacg".to_string());
 
-            // 使用限流请求
-            let client_limited = client.with_limit(3); // 降低并发限制
+            // 从配置中获取 parser 配置
+            let parser_config = if let Some(state) = app_state {
+                Some(state.config.read().parser_config.get_config("wnacg"))
+            } else {
+                None
+            };
+
+            // 使用配置中的并发数
+            let concurrency = parser_config
+                .map(|config| config.base.concurrency)
+                .flatten()
+                .unwrap_or(3);
+            
+            let client_limited = client.with_limit(concurrency);
             let mut headers = HeaderMap::new();
             let _ = headers.insert("Referer", "https://www.wnacg.com/".parse().unwrap());
             let first = client_limited

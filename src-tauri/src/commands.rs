@@ -68,8 +68,34 @@ pub fn config_set_proxy(state: State<AppState>, proxy: String) -> Result<bool, S
 }
 
 #[tauri::command]
+pub fn config_get_parser_config(state: State<AppState>, parser_name: String) -> Result<crate::config::parser_config::ParserConfig, String> {
+    Ok(state.config.read().parser_config.get_config(&parser_name))
+}
+
+#[tauri::command]
+pub fn config_set_parser_config(state: State<AppState>, parser_name: String, config: crate::config::parser_config::ParserConfig) -> Result<bool, String> {
+    state
+        .config
+        .write()
+        .set_parser_config_auto_save(&parser_name, config)
+        .map(|_| true)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn config_get_all_parser_configs(state: State<AppState>) -> Result<std::collections::HashMap<String, crate::config::parser_config::ParserConfig>, String> {
+    Ok(state.config.read().parser_config.get_all_configs().clone())
+}
+
+
+#[tauri::command]
 pub fn config_get_libraries(state: State<AppState>) -> Result<Vec<String>, String> {
     Ok(state.config.read().get_libraries())
+}
+
+#[tauri::command]
+pub fn config_get_config_path(state: State<AppState>) -> Result<String, String> {
+    Ok(state.config.read().get_config_path())
 }
 
 #[tauri::command]
