@@ -10,6 +10,9 @@
 
                     <div class="flex items-center gap-2 mt-4">
                         <Input ref="inputRef" v-model="url" class="flex-1" help="please input the target manga url" />
+                        <Button @click="handlePaste" variant="outline" class="px-3" title="粘贴">
+                            <ClipboardPaste :size="16" class="text-white" />
+                        </Button>
                     </div>
                     <div class="flex justify-end">
                         <div class="flex gap-2">
@@ -39,7 +42,7 @@
 import { createDownloadHandler } from "@/views/Download/services";
 import { defineProps, defineEmits, ref, onMounted, watch, nextTick } from "vue";
 import { Button, Input } from ".";
-import { Download, X } from "lucide-vue-next";
+import { Download, X, ClipboardPaste } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 
 
@@ -85,6 +88,21 @@ async function handleDownload() {
 
     await downloadHandler(url.value.trim());
     // closeModal();
+}
+
+// 处理粘贴
+async function handlePaste() {
+    try {
+        const clipboardText = await navigator.clipboard.readText();
+        if (clipboardText.trim()) {
+            url.value = clipboardText.trim();
+        } else {
+            toast.error('剪贴板为空');
+        }
+    } catch (error) {
+        console.error('粘贴失败:', error);
+        toast.error('无法访问剪贴板，请手动粘贴');
+    }
 }
 
 // 处理键盘事件
