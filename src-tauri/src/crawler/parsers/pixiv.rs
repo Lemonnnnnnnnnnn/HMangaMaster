@@ -2,6 +2,7 @@ use crate::crawler::{ParsedGallery, SiteParser, ProgressReporter};
 use crate::request::Client;
 use crate::progress::ProgressContext;
 use crate::crawler::parsers::common::RequestContext;
+use crate::config::service::ConfigService;
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE};
 use serde_json::Value;
 use scraper::{Html, Selector};

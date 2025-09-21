@@ -3,6 +3,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::AppState;
+use crate::config::service::ConfigService;
 use crate::services::{CrawlService, HistoryService, crawl_service::CrawlError};
 
 /// 任务服务错误类型

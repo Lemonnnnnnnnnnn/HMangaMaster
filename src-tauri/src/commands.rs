@@ -1,6 +1,7 @@
 use tauri::State;
 
 use crate::AppState;
+use crate::config::service::ConfigService;
 use crate::history;
 use crate::library;
 use crate::logger;

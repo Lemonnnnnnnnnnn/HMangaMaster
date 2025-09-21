@@ -2,6 +2,7 @@ use crate::progress::ProgressContext;
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::request::Client;
 use crate::crawler::parsers::common::RequestContext;
+use crate::config::service::ConfigService;
 use reqwest::header::{HeaderMap, COOKIE};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

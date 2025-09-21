@@ -4,13 +4,12 @@ use tauri::{AppHandle, Manager};
 use tokio_util::sync::CancellationToken;
 use std::collections::HashMap;
 
-use crate::config::Manager as ConfigManager;
+use crate::config::service::{AppConfigService, ConfigService};
 use crate::logger::Logger;
 use crate::request::RequestClient;
 use crate::task::TaskManager;
 use crate::services::TaskService;
 
-mod app;
 mod commands;
 mod logger;
 mod config;
@@ -26,7 +25,7 @@ mod services;
 #[derive(Clone)]
 pub struct AppState {
     pub logger: Arc<Logger>,
-    pub config: Arc<RwLock<ConfigManager>>,
+    pub config: Arc<RwLock<AppConfigService>>,
     pub request: Arc<RwLock<RequestClient>>,
     pub cancels: Arc<RwLock<HashMap<String, CancellationToken>>>,
     pub task_manager: Arc<RwLock<TaskManager>>,
@@ -37,7 +36,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             logger: Arc::new(Logger::new()),
-            config: Arc::new(RwLock::new(ConfigManager::default())),
+            config: Arc::new(RwLock::new(AppConfigService::default())),
             request: Arc::new(RwLock::new(RequestClient::new(None).unwrap())),
             cancels: Arc::new(RwLock::new(HashMap::new())),
             task_manager: Arc::new(RwLock::new(TaskManager::default())),
@@ -52,9 +51,9 @@ impl AppState {
 
     pub fn init_config(&self, handle: AppHandle) -> anyhow::Result<()> {
         {
-            let mut mgr = self.config.write();
-            mgr.set_path_from_app(&handle)?;
-            mgr.load_or_default()?;
+            let mut config = self.config.write();
+            config.set_path_from_app(&handle)?;
+            config.load_or_default()?;
         }
         self.rebuild_request_client()?;
         Ok(())

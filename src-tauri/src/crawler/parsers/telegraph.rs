@@ -2,6 +2,7 @@ use crate::crawler::{ParsedGallery, SiteParser, ProgressReporter};
 use crate::request::Client;
 use crate::progress::ProgressContext;
 use crate::crawler::parsers::common::{RequestContext, url_utils};
+use crate::config::service::ConfigService;
 
 pub struct TelegraphParser;
 

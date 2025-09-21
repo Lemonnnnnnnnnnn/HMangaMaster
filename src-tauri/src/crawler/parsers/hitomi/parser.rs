@@ -2,6 +2,7 @@ use crate::crawler::parsers::common::RequestContext;
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::progress::ProgressContext;
 use crate::request::Client;
+use crate::config::service::ConfigService;
 use reqwest::header::{HeaderMap, REFERER};
 
 use super::gg_parser::parse_gg_constants_rust;

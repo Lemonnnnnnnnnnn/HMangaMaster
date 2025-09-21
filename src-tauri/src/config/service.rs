@@ -1,6 +1,8 @@
 use std::sync::Arc;
+use std::path::PathBuf;
 use parking_lot::RwLock;
-use crate::config::{Config, repository::ConfigRepository, parser_config::{ParserConfig, ParserConfigManager}};
+use tauri::Manager as TauriManager;
+use crate::config::{Config, repository::{ConfigRepository, FileConfigRepository}, parser_config::{ParserConfig, ParserConfigManager}};
 
 /// 配置服务接口
 pub trait ConfigService {
@@ -14,24 +16,64 @@ pub trait ConfigService {
     fn set_proxy(&mut self, proxy: String) -> anyhow::Result<()>;
     fn get_parser_config(&self, parser_name: &str) -> ParserConfig;
     fn set_parser_config(&mut self, parser_name: &str, config: ParserConfig) -> anyhow::Result<()>;
+    fn set_parser_config_auto_save(&mut self, parser_name: &str, config: ParserConfig) -> anyhow::Result<()>;
     fn get_all_parser_configs(&self) -> std::collections::HashMap<String, ParserConfig>;
 }
 
 /// 应用配置服务实现
 pub struct AppConfigService {
+    config_path: PathBuf,
     repository: Box<dyn ConfigRepository>,
     parser_config_manager: Arc<RwLock<ParserConfigManager>>,
 }
 
+impl Default for AppConfigService {
+    fn default() -> Self {
+        Self {
+            config_path: PathBuf::new(),
+            repository: Box::new(FileConfigRepository::new(PathBuf::new())),
+            parser_config_manager: Arc::new(RwLock::new(ParserConfigManager::new())),
+        }
+    }
+}
+
 impl AppConfigService {
     pub fn new(
+        config_path: PathBuf,
         repository: Box<dyn ConfigRepository>,
         parser_config_manager: Arc<RwLock<ParserConfigManager>>,
     ) -> Self {
         Self {
+            config_path,
             repository,
             parser_config_manager,
         }
+    }
+
+    pub fn set_path_from_app(&mut self, app: &tauri::AppHandle) -> anyhow::Result<()> {
+        self.config_path = default_config_path(app)?;
+        let repository = Box::new(FileConfigRepository::new(self.config_path.clone()));
+        self.repository = repository;
+        Ok(())
+    }
+
+    pub fn load_or_default(&mut self) -> anyhow::Result<()> {
+        // 加载配置并初始化解析器配置管理器
+        let config = self.load()?;
+        if let Some(parser_configs) = &config.parser_configs {
+            let parser_config_manager = Arc::new(RwLock::new(ParserConfigManager::new()));
+            for (name, config) in parser_configs {
+                parser_config_manager.write().set_config(name, config.clone());
+            }
+
+            // 更新配置服务中的解析器配置管理器
+            self.parser_config_manager = parser_config_manager;
+        }
+        Ok(())
+    }
+
+    pub fn get_config_path(&self) -> String {
+        self.config_path.to_string_lossy().to_string()
     }
 
     pub fn load(&self) -> anyhow::Result<Config> {
@@ -117,4 +159,20 @@ impl ConfigService for AppConfigService {
     fn get_all_parser_configs(&self) -> std::collections::HashMap<String, ParserConfig> {
         self.parser_config_manager.read().get_all_configs().clone()
     }
+
+    fn set_parser_config_auto_save(&mut self, parser_name: &str, config: ParserConfig) -> anyhow::Result<()> {
+        self.set_parser_config(parser_name, config)
+    }
+}
+
+fn default_config_path(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
+    #[allow(deprecated)]
+    let base = app
+        .path()
+        .app_config_dir()
+        .unwrap_or_else(|_| app.path().app_data_dir().unwrap_or(std::env::temp_dir()));
+    if !base.exists() {
+        std::fs::create_dir_all(&base)?;
+    }
+    Ok(base.join("config.json"))
 }

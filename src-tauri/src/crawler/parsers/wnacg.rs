@@ -1,6 +1,7 @@
 use crate::crawler::{ParsedGallery, ProgressReporter, SiteParser};
 use crate::progress::ProgressContext;
 use crate::request::Client;
+use crate::config::service::ConfigService;
 use reqwest::header::HeaderMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
