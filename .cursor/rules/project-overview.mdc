@@ -1,0 +1,40 @@
+---
+alwaysApply: true
+description: HMangaMaster 项目结构和开发规范概述
+---
+
+# HMangaMaster 项目概述
+
+这是一个基于 Tauri + Vue.js 的漫画下载工具项目。
+
+## 项目结构
+
+### 前端 (Vue.js)
+- **src/**: Vue.js 前端代码
+  - `components/`: 可复用组件
+  - `views/`: 页面组件
+  - `router/`: 路由配置
+  - `stores/`: 状态管理
+  - `types/`: TypeScript 类型定义
+
+### 后端 (Rust/Tauri)
+- **src-tauri/**: Rust 后端代码
+  - `src/crawler/`: 漫画网站爬虫
+  - `src/services/`: 业务服务
+  - `src/config/`: 配置管理
+  - `src/commands.rs`: Tauri 命令定义
+
+## 开发规范
+
+### 代码风格
+- 使用 TypeScript 进行前端开发
+- 使用 Rust 进行后端开发
+- 遵循各语言的官方代码规范
+
+### 提交规范
+- 使用清晰的提交信息
+- 保持功能完整性
+- 确保代码能够编译通过
+
+### 重构原则
+请参考 [refactoring-principles.mdc](mdc:refactoring-principles.mdc) 获取详细的重构指导原则。
