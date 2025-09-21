@@ -39,7 +39,7 @@ impl CrawlService {
         task_id: &str,
         task_manager: &Arc<parking_lot::RwLock<TaskManager>>,
         cancel_token: &CancellationToken,
-        app_state: Option<&crate::app::AppState>,
+        app_state: Option<&crate::AppState>,
     ) -> Result<crawler::ParsedGallery, CrawlError> {
         // 创建进度报告器
         let reporter = Arc::new(progress::TaskReporter::new(

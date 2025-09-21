@@ -15,14 +15,14 @@ impl TelegraphParser {
 impl SiteParser for TelegraphParser {
     fn name(&self) -> &'static str { "telegraph" }
     fn domains(&self) -> &'static [&'static str] { &["telegra.ph"] }
-    fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>, app_state: Option<&'a crate::app::AppState>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
+    fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>, app_state: Option<&'a crate::AppState>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
         Box::pin(async move {
             // 创建ProgressContext
             let progress = ProgressContext::new(reporter, "Telegraph".to_string());
 
             // 从配置中获取 parser 配置
             let parser_config = if let Some(state) = app_state {
-                Some(state.config.read().parser_config.get_config("telegraph"))
+                Some(state.config.read().get_parser_config("telegraph"))
             } else {
                 None
             };

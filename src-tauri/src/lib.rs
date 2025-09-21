@@ -1,4 +1,15 @@
-use tauri::Manager;
+use std::sync::Arc;
+use parking_lot::RwLock;
+use tauri::{AppHandle, Manager};
+use tokio_util::sync::CancellationToken;
+use std::collections::HashMap;
+
+use crate::config::Manager as ConfigManager;
+use crate::logger::Logger;
+use crate::request::RequestClient;
+use crate::task::TaskManager;
+use crate::services::TaskService;
+
 mod app;
 mod commands;
 mod logger;
@@ -12,15 +23,61 @@ mod crawler;
 mod progress;
 mod services;
 
+#[derive(Clone)]
+pub struct AppState {
+    pub logger: Arc<Logger>,
+    pub config: Arc<RwLock<ConfigManager>>,
+    pub request: Arc<RwLock<RequestClient>>,
+    pub cancels: Arc<RwLock<HashMap<String, CancellationToken>>>,
+    pub task_manager: Arc<RwLock<TaskManager>>,
+    pub task_service: Arc<TaskService>,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self {
+            logger: Arc::new(Logger::new()),
+            config: Arc::new(RwLock::new(ConfigManager::default())),
+            request: Arc::new(RwLock::new(RequestClient::new(None).unwrap())),
+            cancels: Arc::new(RwLock::new(HashMap::new())),
+            task_manager: Arc::new(RwLock::new(TaskManager::default())),
+            task_service: Arc::new(TaskService::new()),
+        }
+    }
+
+    pub fn init_logger(&self, handle: AppHandle) -> anyhow::Result<()> {
+        self.logger.init(&handle)?;
+        Ok(())
+    }
+
+    pub fn init_config(&self, handle: AppHandle) -> anyhow::Result<()> {
+        {
+            let mut mgr = self.config.write();
+            mgr.set_path_from_app(&handle)?;
+            mgr.load_or_default()?;
+        }
+        self.rebuild_request_client()?;
+        Ok(())
+    }
+
+    pub fn rebuild_request_client(&self) -> anyhow::Result<()> {
+        let proxy = self.config.read().get_proxy();
+        let proxy_opt = if proxy.is_empty() { None } else { Some(proxy) };
+        let client = RequestClient::new(proxy_opt)?;
+        *self.request.write() = client;
+        Ok(())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(app::AppState::new())
+        .manage(AppState::new())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_handle = app.handle();
-            let state = app.state::<app::AppState>();
+            let state = app.state::<AppState>();
             state.init_logger(app_handle.clone())?;
             state.init_config(app_handle.clone())?;
             Ok(())

@@ -2,7 +2,7 @@ use tauri::{AppHandle, Emitter};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::app::AppState;
+use crate::AppState;
 use crate::services::{CrawlService, HistoryService, crawl_service::CrawlError};
 
 /// 任务服务错误类型

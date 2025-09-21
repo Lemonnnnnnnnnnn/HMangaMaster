@@ -38,7 +38,7 @@ pub trait SiteParser: Send + Sync {
         client: &'a Client,
         url: &'a str,
         reporter: Option<Arc<dyn ProgressReporter>>,
-        app_state: Option<&'a crate::app::AppState>,
+        app_state: Option<&'a crate::AppState>,
     ) -> core::pin::Pin<
         Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>,
     >;
@@ -58,7 +58,7 @@ pub async fn parse_gallery_auto(
     client: &Client,
     url: &str,
     reporter: Option<Arc<dyn ProgressReporter>>,
-    app_state: Option<&crate::app::AppState>,
+    app_state: Option<&crate::AppState>,
 ) -> anyhow::Result<ParsedGallery> {
     ensure_builtin_registered();
     let parsed = url

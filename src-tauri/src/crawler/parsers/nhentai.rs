@@ -35,7 +35,7 @@ impl SiteParser for NhentaiParser {
         client: &'a Client,
         url: &'a str,
         reporter: Option<std::sync::Arc<dyn ProgressReporter>>,
-        app_state: Option<&'a crate::app::AppState>,
+        app_state: Option<&'a crate::AppState>,
     ) -> core::pin::Pin<
         Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>,
     > {
@@ -49,7 +49,7 @@ impl SiteParser for NhentaiParser {
 
             // 从配置中获取 parser 配置
             let parser_config = if let Some(state) = app_state {
-                Some(state.config.read().parser_config.get_config("nhentai"))
+                Some(state.config.read().get_parser_config("nhentai"))
             } else {
                 None
             };

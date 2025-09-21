@@ -15,14 +15,14 @@ impl Comic18Parser {
 impl SiteParser for Comic18Parser {
     fn name(&self) -> &'static str { "18comic" }
     fn domains(&self) -> &'static [&'static str] { &["18comic.vip", "18comic.org"] }
-    fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>, app_state: Option<&'a crate::app::AppState>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
+    fn parse<'a>(&'a self, client: &'a Client, url: &'a str, reporter: Option<std::sync::Arc<dyn ProgressReporter>>, app_state: Option<&'a crate::AppState>) -> core::pin::Pin<Box<dyn core::future::Future<Output = anyhow::Result<ParsedGallery>> + Send + 'a>> {
         Box::pin(async move {
             // 创建ProgressContext
             let progress = ProgressContext::new(reporter, "18Comic".to_string());
 
             // 从配置中获取 parser 配置
             let parser_config = if let Some(state) = app_state {
-                Some(state.config.read().parser_config.get_config("18comic"))
+                Some(state.config.read().get_parser_config("18comic"))
             } else {
                 None
             };

@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::app::AppState;
+use crate::AppState;
 use crate::history;
 use crate::library;
 use crate::logger;
@@ -69,7 +69,7 @@ pub fn config_set_proxy(state: State<AppState>, proxy: String) -> Result<bool, S
 
 #[tauri::command]
 pub fn config_get_parser_config(state: State<AppState>, parser_name: String) -> Result<crate::config::parser_config::ParserConfig, String> {
-    Ok(state.config.read().parser_config.get_config(&parser_name))
+    Ok(state.config.read().get_parser_config(&parser_name))
 }
 
 #[tauri::command]
@@ -84,7 +84,7 @@ pub fn config_set_parser_config(state: State<AppState>, parser_name: String, con
 
 #[tauri::command]
 pub fn config_get_all_parser_configs(state: State<AppState>) -> Result<std::collections::HashMap<String, crate::config::parser_config::ParserConfig>, String> {
-    Ok(state.config.read().parser_config.get_all_configs().clone())
+    Ok(state.config.read().get_all_parser_configs())
 }
 
 
