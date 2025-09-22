@@ -39,22 +39,19 @@ export class ScrollService {
     }
 
     restoreScrollPosition() {
-        console.log('restoreScrollPosition')
-
         const progress = ProgressService.getProgress(this.mangaStore.mangaPath);
         if (progress && progress.scrollPosition > 0) {
-            // 延迟恢复滚动位置，确保图片已加载
-            setTimeout(() => {
-                if (this.scrollContainer) {
-                    this.scrollContainer.value?.scrollBy({
-                        top: progress.scrollPosition,
-                        // behavior: "smooth"
-                    })
-                    console.log(
-                        `已恢复到上次阅读位置：${progress.scrollPosition}px`,
-                    );
-                }
-            }, 100);
+            // setTimeout(() => {
+            if (this.scrollContainer) {
+                this.scrollContainer.value?.scrollTo({
+                    top: progress.scrollPosition,
+                    // behavior: "smooth"
+                })
+                console.log(
+                    `已恢复到上次阅读位置：${progress.scrollPosition}px`,
+                );
+            }
+            // }, 100);
         }
     }
 
@@ -64,9 +61,7 @@ export class ScrollService {
         }
 
         this.saveTimeout = setTimeout(() => {
-            if (this.scrollContainer && this.mangaStore.mangaPath
-                // && !this.isRestoringProgress
-            ) {
+            if (this.scrollContainer && this.mangaStore.mangaPath) {
                 const scrollPosition = this.scrollContainer.value?.scrollTop;
                 ProgressService.saveProgress(
                     this.mangaStore.mangaPath,
@@ -74,7 +69,7 @@ export class ScrollService {
                     this.mangaStore.selectedImages.length,
                 );
             }
-        }, 100); 
+        }, 100);
     }
 }
 

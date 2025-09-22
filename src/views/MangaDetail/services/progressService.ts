@@ -18,7 +18,6 @@ export interface ProgressData {
 export class ProgressService {
   constructor() {
     ProgressService.cleanupOldProgress();
-
   }
   /**
    * 保存漫画的浏览进度

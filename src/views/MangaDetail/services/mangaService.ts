@@ -6,6 +6,7 @@ import { ProgressService } from './progressService';
 import type { ScrollService } from './scrollService';
 import { resolveResource } from '@tauri-apps/api/path';
 import { toImgSrc } from '@/utils';
+import { nextTick } from 'vue';
 
 export class MangaService {
   private router: ReturnType<typeof useRouter>;
@@ -52,7 +53,9 @@ export class MangaService {
       console.error('加载漫画失败:', error);
     } finally {
       this.mangaStore.loading = false;
-      this.scrollService.restoreScrollPosition();
+      nextTick(() => {
+        this.scrollService.restoreScrollPosition();
+      })
     }
   }
 
