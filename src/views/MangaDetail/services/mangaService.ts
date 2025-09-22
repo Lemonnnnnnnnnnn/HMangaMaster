@@ -53,9 +53,9 @@ export class MangaService {
       console.error('加载漫画失败:', error);
     } finally {
       this.mangaStore.loading = false;
-      nextTick(() => {
+      setTimeout(() => {
         this.scrollService.restoreScrollPosition();
-      })
+      }, 200)
     }
   }
 
