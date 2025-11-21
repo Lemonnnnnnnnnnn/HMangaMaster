@@ -36,6 +36,9 @@ impl GGRust {
         // 查找所有的 o = 数字; break; 语句
         let return_re = Regex::new(r"o\s*=\s*(\d+)")?;
 
+        // 预先编译正则表达式，避免在循环中重复创建
+        let case_re = Regex::new(r"case\s+(\d+):")?;
+
         for captures in return_re.captures_iter(gg_js) {
             let return_value: u32 = captures
                 .get(1)
@@ -52,9 +55,6 @@ impl GGRust {
             // 查找从最后一个 "switch" 到当前 "o =" 之间的所有 case 语句
             if let Some(switch_pos) = before_text.rfind("switch") {
                 let switch_to_return = &before_text[switch_pos..];
-
-                // 匹配所有的 case 数字:
-                let case_re = Regex::new(r"case\s+(\d+):")?;
                 for case_capture in case_re.captures_iter(switch_to_return) {
                     if let Some(case_num_str) = case_capture.get(1) {
                         let case_value: u32 = case_num_str.as_str().parse()?;

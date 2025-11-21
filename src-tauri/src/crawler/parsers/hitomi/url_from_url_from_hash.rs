@@ -28,7 +28,7 @@ pub fn real_full_path_from_hash(hash: &str) -> String {
     format!(
         "{}/{}/{}",
         last,
-        format!("{}{}", third_last, second_last),
+        format_args!("{}{}", third_last, second_last),
         hash
     )
 }
@@ -94,7 +94,7 @@ pub fn url_from_hash(
 ) -> String {
     let ext = ext
         .or(dir)
-        .or_else(|| image.name.as_ref().and_then(|name| name.split('.').last()))
+        .or_else(|| image.name.as_ref().and_then(|name| name.split('.').next_back()))
         .unwrap_or("jpg");
 
     let mut dir_path = dir.unwrap_or("").to_string();

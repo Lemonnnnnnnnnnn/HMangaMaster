@@ -54,7 +54,7 @@ impl Downloader {
                 }
                 Err(e) => {
                     warn!(attempt = attempt + 1, error = %e, "request failed, will retry if attempts remain");
-                    last_err = Some(e.into());
+                    last_err = Some(e);
                 }
             }
         }

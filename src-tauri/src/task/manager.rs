@@ -11,6 +11,18 @@ use reqwest::header::HeaderMap;
 
 use super::{Progress, Task, TaskStatus};
 
+/// Parameters for starting a batch download task
+pub struct BatchDownloadParams {
+    pub app: AppHandle,
+    pub task_id: String,
+    pub urls: Vec<String>,
+    pub paths: Vec<std::path::PathBuf>,
+    pub client: RequestClient,
+    pub token_opt: Option<CancellationToken>,
+    pub default_headers: Option<HeaderMap>,
+    pub concurrency_override: Option<usize>,
+}
+
 #[derive(Clone)]
 pub struct TaskManager {
     pub tasks: Arc<RwLock<HashMap<String, Task>>>,
@@ -132,29 +144,19 @@ impl TaskManager {
         self.max_concurrent_tasks = max;
     }
 
-    pub fn start_batch_with_concurrency(
-        &self,
-        app: AppHandle,
-        task_id: String,
-        urls: Vec<String>,
-        paths: Vec<std::path::PathBuf>,
-        client: RequestClient,
-        token_opt: Option<CancellationToken>,
-        default_headers: Option<HeaderMap>,
-        concurrency_override: Option<usize>,
-    ) -> CancellationToken {
+    pub fn start_batch_with_concurrency(&self, params: BatchDownloadParams) -> CancellationToken {
         use futures_util::stream;
         use futures_util::StreamExt;
-        let concurrency = concurrency_override.unwrap_or(self.download_concurrency);
+        let concurrency = params.concurrency_override.unwrap_or(self.download_concurrency);
         // 将请求客户端的限流与期望并发对齐，避免内部信号量限制导致并发达不到预期
-        let client = client.with_limit(concurrency);
+        let client = params.client.with_limit(concurrency);
         let downloader =
-            Downloader::new_with_headers(client, DownloadConfig::default(), default_headers);
-        let token = token_opt.unwrap_or_else(CancellationToken::new);
-        let total = urls.len() as i32;
+            Downloader::new_with_headers(client, DownloadConfig::default(), params.default_headers);
+        let token = params.token_opt.unwrap_or_default();
+        let total = params.urls.len() as i32;
         {
             let mut w = self.tasks.write();
-            let t = w.entry(task_id.clone()).or_default();
+            let t = w.entry(params.task_id.clone()).or_default();
             t.progress.total = total;
             t.status = TaskStatus::Running;
             t.updated_at = now_str();
@@ -162,7 +164,8 @@ impl TaskManager {
         let ct = token.clone();
         let tm = self.tasks.clone();
         tauri::async_runtime::spawn(async move {
-            let mut stream = stream::iter(urls.into_iter().zip(paths.into_iter()).map(|(u, p)| {
+            #[allow(clippy::useless_conversion)]
+            let mut stream = stream::iter(params.urls.into_iter().zip(params.paths.into_iter()).map(|(u, p)| {
                 let d = downloader.clone();
                 let cancel = ct.clone();
                 async move {
@@ -170,8 +173,8 @@ impl TaskManager {
                         let res: anyhow::Result<()> = Err(anyhow::anyhow!("cancelled"));
                         return res;
                     }
-                    let res = d.download_file(&u, &p).await;
-                    res
+
+                    d.download_file(&u, &p).await
                 }
             }))
             .buffer_unordered(concurrency);
@@ -184,14 +187,14 @@ impl TaskManager {
                     failed_count += 1;
                 }
                 let mut w = tm.write();
-                if let Some(t) = w.get_mut(&task_id) {
+                if let Some(t) = w.get_mut(&params.task_id) {
                     t.progress.current = current;
                     t.progress.total = total;
                     t.failed_count = failed_count;
                     t.updated_at = now_str();
                 }
                 if res.is_err() {
-                    if let Some(t) = w.get_mut(&task_id) {
+                    if let Some(t) = w.get_mut(&params.task_id) {
                         if t.error.is_empty() {
                             t.error = format!("{:?}", res.err());
                         }
@@ -202,7 +205,7 @@ impl TaskManager {
             let (status_str, error_msg);
             {
                 let mut w = tm.write();
-                if let Some(t) = w.get_mut(&task_id) {
+                if let Some(t) = w.get_mut(&params.task_id) {
                     if ct.is_cancelled() {
                         t.status = TaskStatus::Cancelled;
                     } else if t.failed_count == 0 {
@@ -248,7 +251,7 @@ impl TaskManager {
                     };
                     drop(w);
                     let mut hm = history::Manager::default();
-                    let _ = hm.set_dir_from_app(&app);
+                    let _ = hm.set_dir_from_app(&params.app);
                     hm.add_record(dto);
                 } else {
                     drop(w);
@@ -259,19 +262,19 @@ impl TaskManager {
             // 按状态派发事件
             match status_str.as_str() {
                 "completed" => {
-                    let _ = app.emit(
+                    let _ = params.app.emit(
                         "download:completed",
-                        serde_json::json!({"taskId": task_id , "taskName": tm.read().get(&task_id).unwrap().name}),
+                        serde_json::json!({"taskId": params.task_id , "taskName": tm.read().get(&params.task_id).unwrap().name}),
                     );
                 }
                 "cancelled" => {
-                    let _ = app.emit(
+                    let _ = params.app.emit(
                         "download:cancelled",
-                        serde_json::json!({"taskId": task_id , "taskName": tm.read().get(&task_id).unwrap().name}),
+                        serde_json::json!({"taskId": params.task_id , "taskName": tm.read().get(&params.task_id).unwrap().name}),
                     );
                 }
                 _ => {
-                    let _ = app.emit("download:failed", serde_json::json!({"taskId": task_id, "taskName": tm.read().get(&task_id).unwrap().name, "message": error_msg}));
+                    let _ = params.app.emit("download:failed", serde_json::json!({"taskId": params.task_id, "taskName": tm.read().get(&params.task_id).unwrap().name, "message": error_msg}));
                 }
             }
         });

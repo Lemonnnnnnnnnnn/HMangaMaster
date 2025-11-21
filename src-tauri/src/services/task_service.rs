@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::config::service::ConfigService;
-use crate::services::{CrawlService, HistoryService, crawl_service::CrawlError};
+use crate::services::{CrawlService};
 
 /// 任务服务错误类型
 #[derive(Debug)]
@@ -111,16 +111,17 @@ impl TaskService {
         state.task_manager.read().set_status_downloading(task_id, urls.len() as i32);
 
         // 启动批量下载，使用推荐并发数或默认值
-        let token = state.task_manager.read().start_batch_with_concurrency(
-            app.clone(),
-            task_id.to_string(),
+        let batch_params = crate::task::manager::BatchDownloadParams {
+            app: app.clone(),
+            task_id: task_id.to_string(),
             urls,
             paths,
             client,
-            Some(cancel_token.clone()),
-            parsed.download_headers,
-            parsed.recommended_concurrency,
-        );
+            token_opt: Some(cancel_token.clone()),
+            default_headers: parsed.download_headers,
+            concurrency_override: parsed.recommended_concurrency,
+        };
+        let token = state.task_manager.read().start_batch_with_concurrency(batch_params);
 
         // 更新取消令牌
         state.cancels.write().insert(task_id.to_string(), token);
@@ -175,34 +176,6 @@ impl TaskService {
         Ok(())
     }
 
-    /// 处理爬虫错误
-    async fn handle_crawl_error(
-        &self,
-        task_id: &str,
-        error: &CrawlError,
-        app: &AppHandle,
-        state: &AppState,
-    ) -> Result<(), TaskError> {
-        // 根据错误类型设置任务状态
-        match error {
-            CrawlError::Cancelled => {
-                state.task_manager.read().set_cancelled(task_id);
-                let _ = app.emit("download:cancelled", serde_json::json!({"taskId": task_id}));
-            }
-            _ => {
-                state.task_manager.read().set_failed(task_id, &error.to_string());
-                let _ = app.emit("download:failed", serde_json::json!({"taskId": task_id, "message": error.to_string()}));
-            }
-        }
-
-        // 记录到历史
-        if let Some(task) = state.task_manager.read().by_id(task_id) {
-            HistoryService::record_task_result(&task, app)
-                .map_err(|e| TaskError::HistoryError(e.to_string()))?;
-        }
-
-        Ok(())
-    }
 }
 
 impl Default for TaskService {

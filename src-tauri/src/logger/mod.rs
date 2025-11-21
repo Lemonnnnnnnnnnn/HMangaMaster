@@ -10,12 +10,18 @@ pub struct Logger {
     guard: Mutex<Option<tracing_appender::non_blocking::WorkerGuard>>,
 }
 
-impl Logger {
-    pub fn new() -> Self {
+impl Default for Logger {
+    fn default() -> Self {
         Self {
             inited: std::sync::atomic::AtomicBool::new(false),
             guard: Mutex::new(None),
         }
+    }
+}
+
+impl Logger {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn init(&self, app: &tauri::AppHandle) -> anyhow::Result<()> {

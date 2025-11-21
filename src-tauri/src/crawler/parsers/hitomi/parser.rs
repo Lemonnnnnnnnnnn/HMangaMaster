@@ -43,16 +43,11 @@ impl SiteParser for HitomiParser {
             let id = extract_id(url).ok_or_else(|| anyhow::anyhow!("无法从 URL 提取 ID"))?;
 
             // 从配置中获取 parser 配置
-            let parser_config = if let Some(state) = app_state {
-                Some(state.config.read().get_parser_config("hitomi"))
-            } else {
-                None
-            };
+            let parser_config = app_state.map(|state| state.config.read().get_parser_config("hitomi"));
 
             // 使用配置中的并发数
             let concurrency = parser_config
-                .map(|config| config.base.concurrency)
-                .flatten()
+                .and_then(|config| config.base.concurrency)
                 .unwrap_or(3);
             let request_ctx = RequestContext::with_concurrency(client.clone(), concurrency);
 

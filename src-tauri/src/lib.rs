@@ -33,16 +33,22 @@ pub struct AppState {
     pub task_service: Arc<TaskService>,
 }
 
-impl AppState {
-    pub fn new() -> Self {
+impl Default for AppState {
+    fn default() -> Self {
         Self {
-            logger: Arc::new(Logger::new()),
+            logger: Arc::new(Logger::default()),
             config: Arc::new(RwLock::new(AppConfigService::default())),
             request: Arc::new(RwLock::new(RequestClient::new(None).unwrap())),
             cancels: Arc::new(RwLock::new(HashMap::new())),
             task_manager: Arc::new(RwLock::new(TaskManager::default())),
             task_service: Arc::new(TaskService::new()),
         }
+    }
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn init_logger(&self, handle: AppHandle) -> anyhow::Result<()> {
@@ -130,6 +136,8 @@ pub fn run() {
             commands::task_get_status,
             // crawler
             commands::task_start_crawl,
+            // batch
+            commands::batch_start_crawl,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

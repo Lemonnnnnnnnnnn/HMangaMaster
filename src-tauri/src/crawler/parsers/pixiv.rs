@@ -75,15 +75,10 @@ impl SiteParser for PixivParser {
             let mut headers = self.create_pixiv_headers();
 
             // 从配置中获取 parser 配置
-            let parser_config = if let Some(state) = app_state {
-                Some(state.config.read().get_parser_config("pixiv"))
-            } else {
-                None
-            };
+            let parser_config = app_state.map(|state| state.config.read().get_parser_config("pixiv"));
 
             let cookies = parser_config
-                .map(|config| config.auth)
-                .flatten()
+                .and_then(|config| config.auth)
                 .and_then(|auth| auth.cookies)
                 .unwrap_or_default();
 

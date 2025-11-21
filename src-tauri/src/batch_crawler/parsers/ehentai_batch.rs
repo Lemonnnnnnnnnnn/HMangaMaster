@@ -89,14 +89,6 @@ impl EhentaiBatchCrawler {
 }
 
 impl BatchCrawler for EhentaiBatchCrawler {
-    fn name(&self) -> &'static str {
-        "ehentai_batch"
-    }
-
-    fn domains(&self) -> &'static [&'static str] {
-        &["e-hentai.org", "exhentai.org"]
-    }
-
     fn extract_manga_links<'a>(
         &'a self,
         client: &'a Client,
@@ -108,23 +100,18 @@ impl BatchCrawler for EhentaiBatchCrawler {
     > {
         Box::pin(async move {
             // 从配置中获取 parser 配置
-            let parser_config = if let Some(state) = app_state {
-                Some(state.config.read().get_parser_config("ehentai"))
-            } else {
-                None
-            };
+            let parser_config = app_state.map(|state| state.config.read().get_parser_config("ehentai"));
 
             // 使用配置中的并发数（对于批量解析，使用较低的并发数）
             let concurrency = parser_config
-                .map(|config| config.base.concurrency)
-                .flatten()
+                .and_then(|config| config.base.concurrency)
                 .unwrap_or(3); // 批量解析默认使用较低的并发数
 
             let client_limited = client.with_limit(concurrency);
             let mut headers = HeaderMap::new();
             headers.insert(COOKIE, "nw=1".parse()?);
 
-            let request_ctx = RequestContext::new(client_limited, headers, concurrency);
+            let request_ctx = RequestContext::new(client_limited, headers);
 
             // 提取所有页面的漫画链接
             let manga_links = self.extract_all_links(&request_ctx, url).await?;

@@ -281,6 +281,18 @@ pub async fn task_start_crawl(
         .map_err(|e| e.to_string())
 }
 
+// ---------- batch ----------
+#[tauri::command]
+pub async fn batch_start_crawl(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    url: String,
+) -> Result<Vec<String>, String> {
+    let batch_service = crate::services::BatchService::new();
+    batch_service.start_batch_crawl(url, app, &state).await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn task_cancel(
     state: State<AppState>,

@@ -49,16 +49,11 @@ impl SiteParser for NhentaiParser {
             tracing::debug!("提取到画廊ID: {}", gallery_id);
 
             // 从配置中获取 parser 配置
-            let parser_config = if let Some(state) = app_state {
-                Some(state.config.read().get_parser_config("nhentai"))
-            } else {
-                None
-            };
+            let parser_config = app_state.map(|state| state.config.read().get_parser_config("nhentai"));
 
             // 使用配置中的并发数
             let concurrency = parser_config
-                .map(|config| config.base.concurrency)
-                .flatten()
+                .and_then(|config| config.base.concurrency)
                 .unwrap_or(5);
             let headers = HeaderMap::new();
             let client_limited = client.with_limit(concurrency);

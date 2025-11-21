@@ -10,13 +10,6 @@ use std::sync::Arc;
 
 /// 批量解析器接口
 pub trait BatchCrawler: Send + Sync {
-    fn name(&self) -> &'static str;
-    fn domains(&self) -> &'static [&'static str] {
-        &[]
-    }
-    fn can_handle(&self, host: &str) -> bool {
-        self.domains().iter().any(|d| host.ends_with(d))
-    }
 
     /// 从列表页面提取所有漫画链接
     fn extract_manga_links<'a>(

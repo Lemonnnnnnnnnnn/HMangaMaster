@@ -55,9 +55,11 @@ impl ParserConfigManager {
             .cloned()
             .unwrap_or_else(|| {
                 // 使用通用的默认配置
-                let mut base = BaseParserConfig::default();
-                base.task_concurrency = Some(3);  // 默认任务并发数
-                base.concurrency = Some(3);  // 默认并发数
+                let base = BaseParserConfig {
+                    task_concurrency: Some(3),  // 默认任务并发数
+                    concurrency: Some(3),  // 默认并发数
+                    ..BaseParserConfig::default()
+                };
                 ParserConfig {
                     base,
                     auth: None,

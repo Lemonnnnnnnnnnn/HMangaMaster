@@ -7,24 +7,17 @@ use reqwest::header::HeaderMap;
 pub struct RequestContext {
     pub client: RequestClient,
     pub headers: HeaderMap,
-    pub concurrency: usize,
 }
 
 impl RequestContext {
     /// 创建新的请求上下文
-    pub fn new(client: Client, headers: HeaderMap, concurrency: usize) -> Self {
+    pub fn new(client: Client, headers: HeaderMap) -> Self {
         Self {
             client,
             headers,
-            concurrency,
         }
     }
 
-    /// 使用自定义并发数创建请求上下文
-    pub fn with_concurrency(client: Client, concurrency: usize) -> Self {
-        let headers = HeaderMap::new();
-        Self::new(client, headers, concurrency)
-    }
 
     /// 获取HTML内容
     pub async fn fetch_html(&self, url: &str) -> anyhow::Result<String> {
@@ -33,47 +26,5 @@ impl RequestContext {
             anyhow::bail!("状态码异常: {}", resp.status());
         }
         resp.text().await.map_err(Into::into)
-    }
-}
-
-/// URL标准化工具
-pub mod url_utils {
-    /// 标准化单个URL
-    pub fn normalize_single_url(base_domain: &str, url: &str) -> Option<String> {
-        let url = url.trim();
-
-        if url.is_empty() {
-            return None;
-        }
-
-        // 已经是完整URL
-        if url.starts_with("http://") || url.starts_with("https://") {
-            return Some(url.to_string());
-        }
-
-        // 协议相对URL
-        if url.starts_with("//") {
-            return Some(format!("https:{}", url));
-        }
-
-        // 绝对路径
-        if url.starts_with('/') {
-            return Some(format!("https://{}{}", base_domain, url));
-        }
-
-        // 相对路径
-        if !url.contains("://") {
-            return Some(format!("https://{}/{}", base_domain, url.trim_start_matches("./")));
-        }
-
-        None
-    }
-
-    /// 去重URL列表，保持首次出现的顺序
-    pub fn deduplicate_urls(urls: Vec<String>) -> Vec<String> {
-        let mut seen = std::collections::HashSet::new();
-        urls.into_iter()
-            .filter(|url| seen.insert(url.clone()))
-            .collect()
     }
 }

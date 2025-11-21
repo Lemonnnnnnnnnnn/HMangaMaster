@@ -12,9 +12,8 @@ pub struct Manga {
     pub images: Vec<String>,
 }
 
+#[derive(Default)]
 pub struct Manager {}
-
-impl Default for Manager { fn default() -> Self { Self {} } }
 
 impl Manager {
     pub fn load_library(&self, root: &str) -> anyhow::Result<Vec<Manga>> {
@@ -61,7 +60,7 @@ impl Manager {
         Ok(images)
     }
 
-    pub fn sort_images(&self, images: &mut Vec<String>) {
+    pub fn sort_images(&self, images: &mut [String]) {
         images.sort_by(|a, b| {
             let ai = page_offset_key(a);
             let bi = page_offset_key(b);
