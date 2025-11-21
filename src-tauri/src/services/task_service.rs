@@ -42,25 +42,26 @@ impl TaskService {
         // 生成任务ID
         let task_id = Uuid::new_v4().to_string();
 
-        // 预创建任务，便于前端尽早可见
-        state.task_manager.read().create_or_start(&task_id, &url, 0);
-
         // 检查并发限制
         if state.task_manager.read().running_task_count() >= state.config.read().get_max_concurrent_tasks() {
-            // 任务加入队列
-            state.task_manager.read().create_or_start(&task_id, &url, 0);
+            // 任务加入队列 - 直接创建为Queued状态
             {
                 let task_manager = state.task_manager.read();
                 let mut w = task_manager.tasks.write();
-                if let Some(t) = w.get_mut(&task_id) {
-                    t.status = crate::task::TaskStatus::Queued;
-                    t.updated_at = chrono::Utc::now().to_rfc3339();
-                }
+                let mut t = w.remove(&task_id).unwrap_or_default();
+                t.id = task_id.clone();
+                t.url = url.clone();
+                t.status = crate::task::TaskStatus::Queued;
+                t.progress = crate::task::Progress { current: 0, total: 0 };
+                t.start_time = chrono::Utc::now().to_rfc3339();
+                t.updated_at = t.start_time.clone();
+                w.insert(task_id.clone(), t);
             }
             return Ok(task_id);
         }
 
-        // 直接执行任务，不使用额外的异步spawn
+        // 直接执行任务，先创建为Parsing状态
+        state.task_manager.read().create_or_start(&task_id, &url, 0);
         Self::execute_crawl_task_internal(&task_id, &url, &app, state).await?;
 
         Ok(task_id)
@@ -129,6 +130,44 @@ impl TaskService {
         Ok(())
     }
 
+    /// 处理排队中的任务
+    pub async fn process_queued_tasks(
+        &self,
+        app: &AppHandle,
+        state: &AppState,
+    ) -> Result<(), TaskError> {
+        // 检查是否有可用容量
+        while state.task_manager.read().running_task_count() < state.config.read().get_max_concurrent_tasks() {
+            // 获取下一个排队中的任务
+            let queued_task = state.task_manager.read().get_next_queued_task();
+
+            if let Some(task) = queued_task {
+                let task_id = task.id.clone();
+                let url = task.url.clone();
+
+                // 将任务从Queued状态转换为Parsing状态
+                if state.task_manager.read().start_queued_task(&task_id) {
+                    // 执行任务
+                    match Self::execute_crawl_task_internal(&task_id, &url, app, state).await {
+                        Ok(()) => {
+                            // 任务执行成功，继续处理下一个
+                        }
+                        Err(e) => {
+                            // 任务执行失败，记录错误但继续处理其他排队任务
+                            eprintln!("Failed to execute queued task {}: {}", task_id, e);
+                        }
+                    }
+                } else {
+                    break; // 无法启动任务，可能已被其他处理者占用
+                }
+            } else {
+                break; // 没有更多排队任务
+            }
+        }
+
+        Ok(())
+    }
+
     /// 取消任务
     pub fn cancel_task(
         &self,
@@ -141,6 +180,7 @@ impl TaskService {
             state.task_manager.read().set_cancelled(task_id);
 
             let _ = app.emit("download:cancelled", serde_json::json!({"taskId": task_id}));
+            // 队列处理现在通过定期检查完成，无需手动触发
             Ok(true)
         } else {
             Ok(false)

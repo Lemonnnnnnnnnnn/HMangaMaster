@@ -80,6 +80,38 @@ impl AppState {
         *self.request.write() = client;
         Ok(())
     }
+
+    /// 启动定期队列处理器
+    fn start_queue_processor(app: tauri::AppHandle, state: tauri::State<'_, AppState>) {
+        // 创建AppState的深拷贝，包含所有Arc字段的克隆
+        let state_clone = AppState {
+            logger: state.logger.clone(),
+            config: state.config.clone(),
+            request: state.request.clone(),
+            cancels: state.cancels.clone(),
+            task_manager: state.task_manager.clone(),
+            task_service: state.task_service.clone(),
+        };
+
+        tauri::async_runtime::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
+
+            loop {
+                interval.tick().await;
+
+                // 检查是否有排队中的任务
+                if state_clone.task_manager.read().queued_task_count() > 0 {
+                    // 有排队任务，检查是否有可用容量
+                    if state_clone.task_manager.read().running_task_count() < state_clone.config.read().get_max_concurrent_tasks() {
+                        // 有可用容量，处理排队任务
+                        if let Err(e) = state_clone.task_service.process_queued_tasks(&app, &state_clone).await {
+                            eprintln!("队列处理出错: {}", e);
+                        }
+                    }
+                }
+            }
+        });
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -93,6 +125,10 @@ pub fn run() {
             let state = app.state::<AppState>();
             state.init_logger(app_handle.clone())?;
             state.init_config(app_handle.clone())?;
+
+            // 启动定期队列处理器
+            AppState::start_queue_processor(app_handle.clone(), state);
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -127,6 +163,7 @@ pub fn run() {
             commands::history_clear,
             // task
             commands::task_cancel,
+            commands::task_process_queued,
             commands::task_all,
             commands::task_active,
             commands::task_by_id,

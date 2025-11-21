@@ -143,6 +143,29 @@ impl TaskManager {
             .count()
     }
 
+    /// 获取下一个排队中的任务（按创建时间排序）
+    pub fn get_next_queued_task(&self) -> Option<Task> {
+        let tasks = self.tasks.read();
+        tasks
+            .values()
+            .filter(|t| t.status == TaskStatus::Queued)
+            .min_by(|a, b| a.start_time.cmp(&b.start_time))
+            .cloned()
+    }
+
+    /// 将排队中的任务转换为解析状态
+    pub fn start_queued_task(&self, task_id: &str) -> bool {
+        let mut w = self.tasks.write();
+        if let Some(t) = w.get_mut(task_id) {
+            if t.status == TaskStatus::Queued {
+                t.status = TaskStatus::Parsing;
+                t.updated_at = now_str();
+                return true;
+            }
+        }
+        false
+    }
+
     /// 设置最大并发任务数
     pub fn set_max_concurrent_tasks(&mut self, max: usize) {
         self.max_concurrent_tasks = max;
@@ -281,6 +304,8 @@ impl TaskManager {
                     let _ = params.app.emit("download:failed", serde_json::json!({"taskId": params.task_id, "taskName": tm.read().get(&params.task_id).unwrap().name, "message": error_msg}));
                 }
             }
+
+            // 队列处理现在通过定期检查完成，无需手动触发
         });
         token
     }

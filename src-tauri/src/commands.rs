@@ -302,3 +302,12 @@ pub fn task_cancel(
     state.task_service.cancel_task(&task_id, &app, &state)
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn task_process_queued(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    state.task_service.process_queued_tasks(&app, &state).await
+        .map_err(|e| e.to_string())
+}
