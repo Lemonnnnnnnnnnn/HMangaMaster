@@ -6,6 +6,7 @@ use std::collections::HashMap;
 pub struct BaseParserConfig {
     pub concurrency: Option<usize>,
     pub timeout: Option<u64>,           // 毫秒
+    pub task_concurrency: Option<usize>,      // 任务级并发数
     pub retry_count: Option<usize>,
     pub user_agent: Option<String>,
     pub custom_headers: HashMap<String, String>,
@@ -55,6 +56,7 @@ impl ParserConfigManager {
             .unwrap_or_else(|| {
                 // 使用通用的默认配置
                 let mut base = BaseParserConfig::default();
+                base.task_concurrency = Some(3);  // 默认任务并发数
                 base.concurrency = Some(3);  // 默认并发数
                 ParserConfig {
                     base,

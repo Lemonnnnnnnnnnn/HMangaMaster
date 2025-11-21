@@ -20,6 +20,7 @@ mod download;
 mod task;
 mod crawler;
 mod progress;
+mod batch_crawler;
 mod services;
 
 #[derive(Clone)]

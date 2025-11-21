@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(D:/code/mine/HMangaMaster/src-tauri/src/services/mod.rs)",
+      "Bash(cat:*)",
+      "Bash(cargo check:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
