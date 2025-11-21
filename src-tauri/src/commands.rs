@@ -5,6 +5,7 @@ use crate::config::service::ConfigService;
 use crate::history;
 use crate::library;
 use crate::logger;
+use crate::task::TaskStatusInfo;
 
 // ---------- logger ----------
 #[tauri::command]
@@ -86,6 +87,18 @@ pub fn config_set_parser_config(state: State<AppState>, parser_name: String, con
 #[tauri::command]
 pub fn config_get_all_parser_configs(state: State<AppState>) -> Result<std::collections::HashMap<String, crate::config::parser_config::ParserConfig>, String> {
     Ok(state.config.read().get_all_parser_configs())
+}
+
+#[tauri::command]
+pub fn config_get_max_concurrent_tasks(state: State<AppState>) -> Result<usize, String> {
+    Ok(state.config.read().get_max_concurrent_tasks())
+}
+
+#[tauri::command]
+pub fn config_set_max_concurrent_tasks(state: State<'_, AppState>, max: usize) -> Result<bool, String> {
+    state.config.write().set_max_concurrent_tasks(max)
+        .map(|_| true)
+        .map_err(|e| e.to_string())
 }
 
 
@@ -238,6 +251,22 @@ pub fn task_progress(
     task_id: String,
 ) -> Result<crate::task::Progress, String> {
     Ok(state.task_service.get_task_progress(&task_id, &state))
+}
+
+// 任务状态信息
+#[tauri::command]
+pub fn task_get_status(
+    state: State<AppState>,
+) -> Result<TaskStatusInfo, String> {
+    let running_count = state.task_manager.read().running_task_count();
+    let queued_count = state.task_manager.read().queued_task_count();
+    let max_concurrent = state.config.read().get_max_concurrent_tasks();
+
+    Ok(TaskStatusInfo {
+        running_tasks: running_count,
+        queued_tasks: queued_count,
+        max_concurrent_tasks: max_concurrent,
+    })
 }
 
 // ---------- crawler ----------

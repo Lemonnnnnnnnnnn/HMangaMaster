@@ -1,5 +1,4 @@
 use parking_lot::RwLock;
-// use core::fmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
@@ -12,16 +11,20 @@ use reqwest::header::HeaderMap;
 
 use super::{Progress, Task, TaskStatus};
 
+#[derive(Clone)]
 pub struct TaskManager {
     pub tasks: Arc<RwLock<HashMap<String, Task>>>,
     pub download_concurrency: usize,
+    pub max_concurrent_tasks: usize,
 }
 
 impl Default for TaskManager {
     fn default() -> Self {
+        let max_concurrent_tasks = 3; // 默认最多同时运行3个任务
         Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
             download_concurrency: 8,
+            max_concurrent_tasks,
         }
     }
 }
@@ -110,6 +113,25 @@ impl TaskManager {
             .retain(|_, t| t.status == TaskStatus::Running || t.status == TaskStatus::Parsing)
     }
 
+    /// 获取当前运行中的任务数量
+    pub fn running_task_count(&self) -> usize {
+        self.tasks
+            .read()
+            .values()
+            .filter(|t| t.status == TaskStatus::Running || t.status == TaskStatus::Parsing)
+            .count()
+    }
+
+    /// 获取排队中的任务数量 (当前实现为0)
+    pub fn queued_task_count(&self) -> usize {
+        0 // 简化实现，暂不支持队列
+    }
+
+    /// 设置最大并发任务数
+    pub fn set_max_concurrent_tasks(&mut self, max: usize) {
+        self.max_concurrent_tasks = max;
+    }
+
     pub fn start_batch_with_concurrency(
         &self,
         app: AppHandle,
@@ -195,6 +217,7 @@ impl TaskManager {
                     status_str = match t.status {
                         TaskStatus::Pending => "pending".to_string(),
                         TaskStatus::Parsing => "parsing".to_string(),
+                        TaskStatus::Queued => "queued".to_string(),
                         TaskStatus::Running => "downloading".to_string(),
                         TaskStatus::Completed => "completed".to_string(),
                         TaskStatus::PartialFailed => "partial_failed".to_string(),

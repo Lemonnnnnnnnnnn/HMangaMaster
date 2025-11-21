@@ -45,6 +45,34 @@ impl TaskService {
         // 预创建任务，便于前端尽早可见
         state.task_manager.read().create_or_start(&task_id, &url, 0);
 
+        // 检查并发限制
+        if state.task_manager.read().running_task_count() >= state.config.read().get_max_concurrent_tasks() {
+            // 任务加入队列
+            state.task_manager.read().create_or_start(&task_id, &url, 0);
+            {
+                let task_manager = state.task_manager.read();
+                let mut w = task_manager.tasks.write();
+                if let Some(t) = w.get_mut(&task_id) {
+                    t.status = crate::task::TaskStatus::Queued;
+                    t.updated_at = chrono::Utc::now().to_rfc3339();
+                }
+            }
+            return Ok(task_id);
+        }
+
+        // 直接执行任务，不使用额外的异步spawn
+        Self::execute_crawl_task_internal(&task_id, &url, &app, state).await?;
+
+        Ok(task_id)
+    }
+
+    /// 内部任务执行逻辑
+    async fn execute_crawl_task_internal(
+        task_id: &str,
+        url: &str,
+        app: &AppHandle,
+        state: &AppState,
+    ) -> Result<(), TaskError> {
         // 获取必要配置
         let client = state.request.read().clone();
         let output_dir = state.config.read().get_output_dir();
@@ -54,21 +82,22 @@ impl TaskService {
         state
             .cancels
             .write()
-            .insert(task_id.clone(), cancel_token.clone());
+            .insert(task_id.to_string(), cancel_token.clone());
 
         // 解析URL
         let parsed = match CrawlService::parse_and_validate(
             &client,
-            &url,
-            &task_id,
+            url,
+            task_id,
             &state.task_manager,
             &cancel_token,
             Some(state),
         ).await {
             Ok(p) => p,
             Err(e) => {
-                // 处理解析错误
-                self.handle_crawl_error(&task_id, &e, &app, state).await?;
+                // 处理解析错误 - 简化版本直接设置失败状态
+                state.task_manager.read().set_failed(task_id, &e.to_string());
+                let _ = app.emit("download:failed", serde_json::json!({"taskId": task_id, "message": e.to_string()}));
                 return Err(TaskError::CrawlError(e.to_string()));
             }
         };
@@ -78,13 +107,13 @@ impl TaskService {
         let (name, save_path) = CrawlService::prepare_task_info(&parsed, &output_dir);
 
         // 更新任务信息并切换到下载状态
-        state.task_manager.read().set_name_and_path(&task_id, &name, &save_path);
-        state.task_manager.read().set_status_downloading(&task_id, urls.len() as i32);
+        state.task_manager.read().set_name_and_path(task_id, &name, &save_path);
+        state.task_manager.read().set_status_downloading(task_id, urls.len() as i32);
 
         // 启动批量下载，使用推荐并发数或默认值
         let token = state.task_manager.read().start_batch_with_concurrency(
             app.clone(),
-            task_id.clone(),
+            task_id.to_string(),
             urls,
             paths,
             client,
@@ -94,9 +123,9 @@ impl TaskService {
         );
 
         // 更新取消令牌
-        state.cancels.write().insert(task_id.clone(), token);
+        state.cancels.write().insert(task_id.to_string(), token);
 
-        Ok(task_id)
+        Ok(())
     }
 
     /// 取消任务

@@ -11,6 +11,7 @@ pub struct Config {
     pub proxy_url: String,
     pub active_library: String,
     pub parser_configs: Option<std::collections::HashMap<String, parser_config::ParserConfig>>,
+    pub max_concurrent_tasks: Option<usize>,
 }
 
 impl Default for Config {
@@ -21,6 +22,7 @@ impl Default for Config {
             proxy_url: String::new(),
             active_library: String::new(),
             parser_configs: None,
+            max_concurrent_tasks: Some(3), // 默认最多3个并发任务
         }
     }
 }

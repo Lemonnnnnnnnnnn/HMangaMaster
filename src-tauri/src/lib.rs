@@ -51,11 +51,18 @@ impl AppState {
     }
 
     pub fn init_config(&self, handle: AppHandle) -> anyhow::Result<()> {
-        {
+        let max_concurrent_tasks = {
             let mut config = self.config.write();
             config.set_path_from_app(&handle)?;
             config.load_or_default()?;
-        }
+
+            // 获取并发限制配置
+            config.get_max_concurrent_tasks()
+        };
+
+        // 初始化任务管理器的并发限制
+        self.task_manager.write().set_max_concurrent_tasks(max_concurrent_tasks);
+
         self.rebuild_request_client()?;
         Ok(())
     }
@@ -96,6 +103,8 @@ pub fn run() {
             commands::config_set_parser_config,
             commands::config_get_all_parser_configs,
             commands::config_get_config_path,
+            commands::config_get_max_concurrent_tasks,
+            commands::config_set_max_concurrent_tasks,
             // logger
             commands::logger_get_info,
             // library
@@ -118,6 +127,7 @@ pub fn run() {
             commands::task_clear_history,
             commands::task_history,
             commands::task_progress,
+            commands::task_get_status,
             // crawler
             commands::task_start_crawl,
         ])

@@ -18,6 +18,8 @@ pub trait ConfigService {
     fn set_parser_config(&mut self, parser_name: &str, config: ParserConfig) -> anyhow::Result<()>;
     fn set_parser_config_auto_save(&mut self, parser_name: &str, config: ParserConfig) -> anyhow::Result<()>;
     fn get_all_parser_configs(&self) -> std::collections::HashMap<String, ParserConfig>;
+    fn get_max_concurrent_tasks(&self) -> usize;
+    fn set_max_concurrent_tasks(&mut self, max: usize) -> anyhow::Result<()>;
 }
 
 /// 应用配置服务实现
@@ -162,6 +164,19 @@ impl ConfigService for AppConfigService {
 
     fn set_parser_config_auto_save(&mut self, parser_name: &str, config: ParserConfig) -> anyhow::Result<()> {
         self.set_parser_config(parser_name, config)
+    }
+
+    fn get_max_concurrent_tasks(&self) -> usize {
+        self.load()
+            .ok()
+            .and_then(|c| c.max_concurrent_tasks)
+            .unwrap_or(3) // 默认值为3
+    }
+
+    fn set_max_concurrent_tasks(&mut self, max: usize) -> anyhow::Result<()> {
+        let mut config = self.load()?;
+        config.max_concurrent_tasks = Some(max);
+        self.save(&config)
     }
 }
 

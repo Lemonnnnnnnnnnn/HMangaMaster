@@ -59,6 +59,7 @@ impl HistoryService {
         match status {
             TaskStatus::Pending => "pending".to_string(),
             TaskStatus::Parsing => "parsing".to_string(),
+            TaskStatus::Queued => "queued".to_string(),
             TaskStatus::Running => "downloading".to_string(),
             TaskStatus::Completed => "completed".to_string(),
             TaskStatus::PartialFailed => "partial_failed".to_string(),

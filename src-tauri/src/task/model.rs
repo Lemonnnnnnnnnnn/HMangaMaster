@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub enum TaskStatus {
     #[serde(rename = "pending")] Pending,
     #[serde(rename = "parsing")] Parsing,
+    #[serde(rename = "queued")] Queued,
     #[serde(rename = "downloading")] Running,
     #[serde(rename = "completed")] Completed,
     #[serde(rename = "partial_failed")] PartialFailed,
@@ -14,6 +15,14 @@ pub enum TaskStatus {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Progress { pub current: i32, pub total: i32 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskStatusInfo {
+    pub running_tasks: usize,
+    pub queued_tasks: usize,
+    pub max_concurrent_tasks: usize,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
