@@ -115,6 +115,8 @@ function getStatusIcon(status: string) {
         return { icon: Loader, class: 'animate-spin' };
     } else if (status === 'parsing') {
         return { icon: Loader, class: 'animate-spin' };
+    } else if (status === 'queued') {
+        return { icon: Loader, class: 'animate-pulse text-blue-400' };
     } else if (status === 'downloading') {
         return { icon: ArrowBigDownDash, class: 'animate-bounce' };
     } else if (status === 'completed') {
@@ -129,13 +131,14 @@ function getStatusIcon(status: string) {
 }
 
 function canCancel(status: string): boolean {
-    return status === 'pending' || status === 'parsing' || status === 'downloading';
+    return status === 'pending' || status === 'parsing' || status === 'queued' || status === 'downloading';
 }
 
 function formatStatus(status: string): string {
     const statusMap: Record<string, string> = {
         'pending': '等待中',
         'parsing': '解析中',
+        'queued': '排队中',
         'downloading': '下载中',
         'completed': '已完成',
         'partial_failed': '部分失败',

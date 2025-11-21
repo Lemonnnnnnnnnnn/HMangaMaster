@@ -112,7 +112,7 @@ impl TaskManager {
         self.tasks
             .read()
             .values()
-            .filter(|t| t.status == TaskStatus::Running || t.status == TaskStatus::Parsing)
+            .filter(|t| t.status == TaskStatus::Running || t.status == TaskStatus::Parsing || t.status == TaskStatus::Queued)
             .cloned()
             .collect()
     }
@@ -122,7 +122,7 @@ impl TaskManager {
     pub fn clear_non_active(&self) {
         self.tasks
             .write()
-            .retain(|_, t| t.status == TaskStatus::Running || t.status == TaskStatus::Parsing)
+            .retain(|_, t| t.status == TaskStatus::Running || t.status == TaskStatus::Parsing || t.status == TaskStatus::Queued)
     }
 
     /// 获取当前运行中的任务数量
@@ -134,9 +134,13 @@ impl TaskManager {
             .count()
     }
 
-    /// 获取排队中的任务数量 (当前实现为0)
+    /// 获取排队中的任务数量
     pub fn queued_task_count(&self) -> usize {
-        0 // 简化实现，暂不支持队列
+        self.tasks
+            .read()
+            .values()
+            .filter(|t| t.status == TaskStatus::Queued)
+            .count()
     }
 
     /// 设置最大并发任务数
