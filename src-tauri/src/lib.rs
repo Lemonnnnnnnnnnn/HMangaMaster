@@ -164,6 +164,8 @@ pub fn run() {
             // task
             commands::task_cancel,
             commands::task_process_queued,
+            commands::task_retry,
+            commands::task_retry_failed_files_only,
             commands::task_all,
             commands::task_active,
             commands::task_by_id,

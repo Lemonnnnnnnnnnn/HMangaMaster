@@ -311,3 +311,23 @@ pub async fn task_process_queued(
     state.task_service.process_queued_tasks(&app, &state).await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn task_retry(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    task_id: String,
+) -> Result<(), String> {
+    state.task_service.retry_task(&task_id, &app, &state).await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn task_retry_failed_files_only(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    task_id: String,
+) -> Result<(), String> {
+    state.task_service.retry_failed_files_only(&task_id, &app, &state).await
+        .map_err(|e| e.to_string())
+}

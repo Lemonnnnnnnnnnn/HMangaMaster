@@ -309,4 +309,62 @@ impl TaskManager {
         });
         token
     }
+
+    /// 增加重试计数
+    pub fn increment_retry_count(&self, task_id: &str) {
+        let mut w = self.tasks.write();
+        if let Some(task) = w.get_mut(task_id) {
+            task.retry_count += 1;
+            task.last_retry_time = now_str();
+            task.updated_at = now_str();
+        }
+    }
+
+    /// 重置任务状态为完整重试（重新解析和下载）
+    pub fn reset_for_full_retry(&self, task_id: &str) {
+        let mut w = self.tasks.write();
+        if let Some(task) = w.get_mut(task_id) {
+            task.status = TaskStatus::Parsing;
+            task.progress = Progress::default();
+            task.failed_count = 0;
+            task.error = String::new();
+            task.updated_at = now_str();
+        }
+    }
+
+    /// 重置失败文件以便重试（仅重试失败的文件）
+    pub fn reset_failed_files_for_retry(&self, task_id: &str) -> Result<(), String> {
+        let mut w = self.tasks.write();
+        if let Some(task) = w.get_mut(task_id) {
+            if task.status == TaskStatus::PartialFailed {
+                // 重置进度，只重试失败的文件
+                let success_count = task.progress.total - task.failed_count;
+                task.progress.current = success_count;
+                task.failed_count = 0;
+                task.error = String::new();
+                task.status = TaskStatus::Running;
+                task.updated_at = now_str();
+                Ok(())
+            } else {
+                Err("任务状态不是PartialFailed，无法重置失败文件".to_string())
+            }
+        } else {
+            Err("任务不存在".to_string())
+        }
+    }
+
+    /// 获取重试批量下载参数
+    pub fn get_retry_batch_params(
+        &self,
+        task_id: &str,
+        _client: RequestClient,
+        _app: AppHandle,
+    ) -> Option<BatchDownloadParams> {
+        let _task = self.tasks.read().get(task_id)?.clone();
+
+        // 这里需要根据实际情况重新构建下载参数
+        // 由于我们需要原始的URL和路径信息，这部分可能需要从历史记录或其他地方获取
+        // 为简化实现，这里返回None，实际使用时需要补充完整逻辑
+        None
+    }
 }

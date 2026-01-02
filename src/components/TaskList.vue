@@ -52,11 +52,49 @@
                     <span v-else class="text-neutral-500">-</span>
                 </td>
                 <td v-if="mode === 'active'" class="text-center">
-                    <Button
-                        size="sm"
-                        :disabled="!canCancel(task.status)"
-                        @click="$emit('cancel', task.id)"
-                    >停止下载</Button>
+                    <div class="flex items-center justify-center gap-2">
+                        <Button
+                            v-if="canCancel(task.status)"
+                            size="sm"
+                            :disabled="isRetrying(task.id)"
+                            @click="$emit('cancel', task.id)"
+                        >停止下载</Button>
+
+                        <!-- 重试下拉菜单 -->
+                        <div v-if="canRetry(task)" class="relative">
+                            <Button
+                                size="sm"
+                                type="primary"
+                                :disabled="isRetrying(task.id)"
+                                @click="toggleDropdown(task.id)"
+                            >
+                                <RotateCcw :size="14" class="mr-1" v-if="!isRetrying(task.id)" />
+                                <Loader :size="14" class="mr-1 animate-spin" v-else />
+                                {{ getRetryButtonText(task) }}
+                                <ChevronDown :size="14" class="ml-1" />
+                            </Button>
+
+                            <!-- 下拉菜单内容 -->
+                            <div
+                                v-if="openDropdownId === task.id"
+                                class="absolute top-full mt-1 right-0 bg-neutral-700 border border-neutral-600 rounded-lg shadow-lg z-10 min-w-[140px]"
+                            >
+                                <button
+                                    class="w-full text-left px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-600 rounded-t-lg"
+                                    @click="handleRetry(task.id, 'full')"
+                                >
+                                    完整重试
+                                </button>
+                                <button
+                                    v-if="task.status === 'partial_failed'"
+                                    class="w-full text-left px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-600 rounded-b-lg border-t border-neutral-600"
+                                    @click="handleRetry(task.id, 'failedOnly')"
+                                >
+                                    重试失败文件
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </td>
             </tr>
         </tbody>
@@ -66,7 +104,8 @@
 </template>
 
 <script setup lang="ts">
-import { Loader, ArrowBigDownDash, CircleCheck, CircleX, CircleOff, AlertTriangle } from 'lucide-vue-next';
+import { Loader, ArrowBigDownDash, CircleCheck, CircleX, CircleOff, AlertTriangle, RotateCcw, ChevronDown } from 'lucide-vue-next';
+import { ref } from 'vue';
 import Button from './Button.vue';
 // 类型最小替代，避免依赖 wailsjs
 type DownloadTaskLike = {
@@ -80,16 +119,40 @@ type DownloadTaskLike = {
     progress?: { current?: number; total?: number } | null;
     startTime?: string;
     completeTime?: string;
+    retryCount?: number;
+    maxRetries?: number;
+    retryable?: boolean;
 };
 
 const props = defineProps<{
     tasks: DownloadTaskLike[],
-    mode?: 'active' | 'history'
+    mode?: 'active' | 'history',
+    retryingTasks?: Set<string>
 }>();
 
-defineEmits<{
-    (e: 'cancel', taskId: string): void
+const emit = defineEmits<{
+    (e: 'cancel', taskId: string): void,
+    (e: 'retry', taskId: string, retryType: 'full' | 'failedOnly'): void
 }>();
+
+// 下拉菜单状态管理
+const openDropdownId = ref<string | null>(null);
+
+function toggleDropdown(taskId: string) {
+    openDropdownId.value = openDropdownId.value === taskId ? null : taskId;
+}
+
+function handleRetry(taskId: string, retryType: 'full' | 'failedOnly') {
+    openDropdownId.value = null;
+    emit('retry', taskId, retryType);
+}
+
+// 点击外部关闭下拉菜单
+document.addEventListener('click', (event) => {
+    if (openDropdownId.value && !(event.target as HTMLElement).closest('.relative')) {
+        openDropdownId.value = null;
+    }
+});
 
 function calculateProgressPercentage(current: number, total: number): number {
     if (total <= 0) return 0;
@@ -134,6 +197,12 @@ function canCancel(status: string): boolean {
     return status === 'pending' || status === 'parsing' || status === 'queued' || status === 'downloading';
 }
 
+function canRetry(task: DownloadTaskLike): boolean {
+    return (task.status === 'failed' || task.status === 'partial_failed') &&
+           (task.retryable !== false) &&
+           ((task.retryCount ?? 0) < (task.maxRetries ?? 3));
+}
+
 function formatStatus(status: string): string {
     const statusMap: Record<string, string> = {
         'pending': '等待中',
@@ -146,6 +215,16 @@ function formatStatus(status: string): string {
         'cancelled': '已取消'
     };
     return statusMap[status] || status;
+}
+
+function getRetryButtonText(task: DownloadTaskLike): string {
+    const retryCount = task.retryCount ?? 0;
+    const maxRetries = task.maxRetries ?? 3;
+    return `重试 (${retryCount}/${maxRetries})`;
+}
+
+function isRetrying(taskId: string): boolean {
+    return props.retryingTasks?.has(taskId) ?? false;
 }
 
 const mode = props.mode ?? 'active';

@@ -12,7 +12,8 @@ export const useDownloadStore = defineStore('downloadStore', {
   state: () => ({
     activeTasks: ref<any[]>([]),
     historyTasks: ref<any[]>([]),
-    loading: false as boolean
+    loading: false as boolean,
+    retryingTasks: ref<Set<string>>(new Set())
   }),
   getters: {
     activeTasksCount: (state) => state.activeTasks.length
@@ -51,6 +52,32 @@ export const useDownloadStore = defineStore('downloadStore', {
       } catch (err) {
         console.error('取消任务出错:', err);
         throw err;
+      }
+    },
+
+    async retryTask(taskId: string) {
+      try {
+        this.retryingTasks.add(taskId);
+        await invoke<void>('task_retry', { taskId });
+        await this.pollTasks();
+      } catch (err) {
+        console.error('重试任务出错:', err);
+        throw err;
+      } finally {
+        this.retryingTasks.delete(taskId);
+      }
+    },
+
+    async retryFailedFilesOnly(taskId: string) {
+      try {
+        this.retryingTasks.add(taskId);
+        await invoke<void>('task_retry_failed_files_only', { taskId });
+        await this.pollTasks();
+      } catch (err) {
+        console.error('重试失败文件出错:', err);
+        throw err;
+      } finally {
+        this.retryingTasks.delete(taskId);
       }
     },
   }

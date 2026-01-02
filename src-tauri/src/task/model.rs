@@ -38,6 +38,10 @@ pub struct Task {
     pub start_time: String,
     pub complete_time: String,
     pub updated_at: String,
+    pub retry_count: i32,
+    pub max_retries: i32,
+    pub last_retry_time: String,
+    pub retryable: bool,
 }
 
 impl Default for Task {
@@ -53,7 +57,11 @@ impl Default for Task {
             progress: Progress::default(),
             start_time: String::new(),
             complete_time: String::new(),
-            updated_at: String::new()
+            updated_at: String::new(),
+            retry_count: 0,
+            max_retries: 99,
+            last_retry_time: String::new(),
+            retryable: true,
         }
     }
 }

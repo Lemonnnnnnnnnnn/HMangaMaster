@@ -50,7 +50,14 @@
             </Button>
         </div>
         <div class="flex-1 overflow-auto">
-            <TaskList class="mt-2" :tasks="activeTasks" mode="active" @cancel="onCancelTask" />
+            <TaskList
+                class="mt-2"
+                :tasks="activeTasks"
+                mode="active"
+                :retrying-tasks="retryingTasks"
+                @cancel="onCancelTask"
+                @retry="onRetryTask"
+            />
         </div>
     </div>
 
@@ -75,7 +82,7 @@ let batchUrl = ref('');
 let isBatchDownloading = ref(false);
 let batchResult = ref<any>(null);
 
-const { activeTasks } = storeToRefs(downloadStore);
+const { activeTasks, retryingTasks } = storeToRefs(downloadStore);
 
 function handleKeydown(event: any) {
     if (event.key === 'Enter') {
@@ -168,6 +175,21 @@ const batchDownloadHandler = createBatchDownloadHandler({
 
 async function onCancelTask(taskId: string) {
     await downloadStore.cancelTask(taskId);
+}
+
+async function onRetryTask(taskId: string, retryType: 'full' | 'failedOnly') {
+    try {
+        if (retryType === 'full') {
+            await downloadStore.retryTask(taskId);
+            toast.success('任务重试已启动');
+        } else {
+            await downloadStore.retryFailedFilesOnly(taskId);
+            toast.success('失败文件重试已启动');
+        }
+    } catch (err) {
+        console.error('重试任务失败:', err);
+        toast.error('重试任务失败');
+    }
 }
 
 </script>

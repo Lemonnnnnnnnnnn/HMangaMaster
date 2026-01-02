@@ -216,6 +216,55 @@ impl TaskService {
         Ok(())
     }
 
+    /// 完整重试失败的任务（重新解析和下载）
+    pub async fn retry_task(
+        &self,
+        task_id: &str,
+        app: &AppHandle,
+        state: &AppState,
+    ) -> Result<(), TaskError> {
+        // 检查任务是否可重试
+        let task = state.task_manager.read().by_id(task_id)
+            .ok_or_else(|| TaskError::CrawlError("任务不存在".to_string()))?;
+
+        if !self.is_task_retryable(&task) {
+            return Err(TaskError::CrawlError("任务不可重试或已达到最大重试次数".to_string()));
+        }
+
+        // 增加重试计数
+        state.task_manager.read().increment_retry_count(task_id);
+
+        // 重置任务状态为解析中
+        state.task_manager.read().reset_for_full_retry(task_id);
+
+        // 重新执行任务
+        Self::execute_crawl_task_internal(task_id, &task.url, app, state).await?;
+
+        Ok(())
+    }
+
+    /// 部分重试失败的任务（仅重试失败的文件）
+    // TODO: 需要存储原始URL和路径信息以实现此功能
+    pub async fn retry_failed_files_only(
+        &self,
+        _task_id: &str,
+        _app: &AppHandle,
+        _state: &AppState,
+    ) -> Result<(), TaskError> {
+        // 暂时返回错误，提示使用完整重试
+        Err(TaskError::CrawlError("部分重试功能尚未实现，请使用完整重试".to_string()))
+    }
+
+    /// 检查任务是否可重试
+    pub fn is_task_retryable(&self, task: &crate::task::Task) -> bool {
+        match task.status {
+            crate::task::TaskStatus::Failed | crate::task::TaskStatus::PartialFailed => {
+                task.retryable && task.retry_count < task.max_retries
+            }
+            _ => false,
+        }
+    }
+
 }
 
 impl Default for TaskService {
