@@ -43,23 +43,50 @@ export class ScrollService {
 
   restoreScrollPosition() {
     const progress = ProgressService.getProgress(this.mangaStore.mangaPath);
-    if (progress && progress.scrollPosition > 0) {
-      if (this.scrollContainer?.value) {
-        const container = this.scrollContainer.value;
+    if (progress && this.scrollContainer?.value) {
+      const container = this.scrollContainer.value;
+      let scrollPosition = 0;
+      let logMessage = "";
+
+      // 检查是否为旧版本数据格式
+      if (
+        ProgressService.isLegacyProgress(progress) &&
+        progress.scrollPosition !== undefined
+      ) {
+        // 旧版本数据：直接使用保存的像素位置，但限制在有效范围内
         const maxScroll = container.scrollHeight - container.clientHeight;
+        scrollPosition = Math.min(progress.scrollPosition, maxScroll);
+        logMessage = `已恢复到上次阅读位置：${scrollPosition}px (旧版本数据)`;
 
-        // 确保滚动位置不超过最大可滚动范围
-        const safeScrollPosition = Math.min(progress.scrollPosition, maxScroll);
-
-        if (safeScrollPosition > 0) {
-          container.scrollTo({
-            top: safeScrollPosition,
-            // behavior: "smooth" // 注释掉平滑滚动，确保立即生效
-          });
-          console.log(
-            `已恢复到上次阅读位置：${safeScrollPosition}px (原始: ${progress.scrollPosition}px)`,
+        // 异步迁移为新格式
+        setTimeout(() => {
+          const scrollPercentage = ProgressService.calculateScrollPercentage(
+            scrollPosition,
+            container.scrollHeight,
+            container.clientHeight,
           );
-        }
+          ProgressService.saveProgress(
+            this.mangaStore.mangaPath,
+            scrollPercentage,
+            this.mangaStore.selectedImages.length,
+          );
+        }, 100);
+      } else if (progress.scrollPercentage > 0) {
+        // 新版本数据：根据百分比计算实际滚动位置
+        scrollPosition = ProgressService.calculateScrollPosition(
+          progress.scrollPercentage,
+          container.scrollHeight,
+          container.clientHeight,
+        );
+        logMessage = `已恢复到上次阅读位置：${scrollPosition}px (百分比: ${(progress.scrollPercentage * 100).toFixed(1)}%)`;
+      }
+
+      if (scrollPosition > 0) {
+        container.scrollTo({
+          top: scrollPosition,
+          // behavior: "smooth" // 注释掉平滑滚动，确保立即生效
+        });
+        console.log(logMessage);
       }
     }
   }
@@ -70,11 +97,20 @@ export class ScrollService {
     }
 
     this.saveTimeout = setTimeout(() => {
-      if (this.scrollContainer && this.mangaStore.mangaPath) {
-        const scrollPosition = this.scrollContainer.value?.scrollTop;
+      if (this.scrollContainer?.value && this.mangaStore.mangaPath) {
+        const container = this.scrollContainer.value;
+        const scrollPosition = container.scrollTop || 0;
+
+        // 计算滚动百分比
+        const scrollPercentage = ProgressService.calculateScrollPercentage(
+          scrollPosition,
+          container.scrollHeight,
+          container.clientHeight,
+        );
+
         ProgressService.saveProgress(
           this.mangaStore.mangaPath,
-          scrollPosition || 0,
+          scrollPercentage,
           this.mangaStore.selectedImages.length,
         );
       }
