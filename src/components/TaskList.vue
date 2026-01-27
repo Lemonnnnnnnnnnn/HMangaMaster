@@ -96,8 +96,10 @@
 <script setup lang="ts">
 import { Loader, ArrowBigDownDash, CircleCheck, CircleX, CircleOff, AlertTriangle, RotateCcw, ChevronDown } from 'lucide-vue-next';
 import { ref } from 'vue';
+import { toast } from 'vue-sonner';
 import Button from './Button.vue';
 import DropDown from './DropDown.vue';
+import { useDownloadStore } from '@/views/Download/stores';
 // 类型最小替代，避免依赖 wailsjs
 type DownloadTaskLike = {
     id: string;
@@ -122,16 +124,27 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-    (e: 'cancel', taskId: string): void,
-    (e: 'retry', taskId: string, retryType: 'full' | 'failedOnly'): void
+    (e: 'cancel', taskId: string): void
 }>();
+
+const downloadStore = useDownloadStore();
 
 // 下拉菜单状态管理
 const openDropdowns = ref<Record<string, boolean>>({})
 
-function handleRetry(taskId: string, retryType: 'full' | 'failedOnly') {
-    // 下拉菜单会自动关闭（通过 DropDown 组件的 closeOnClick）
-    emit('retry', taskId, retryType);
+async function handleRetry(taskId: string, retryType: 'full' | 'failedOnly') {
+    try {
+        if (retryType === 'full') {
+            await downloadStore.retryTask(taskId);
+            toast.success('任务重试已启动');
+        } else {
+            await downloadStore.retryFailedFilesOnly(taskId);
+            toast.success('失败文件重试已启动');
+        }
+    } catch (err) {
+        console.error('重试任务失败:', err);
+        toast.error('重试任务失败');
+    }
 }
 
 function calculateProgressPercentage(current: number, total: number): number {

@@ -252,7 +252,9 @@ impl TaskService {
         _state: &AppState,
     ) -> Result<(), TaskError> {
         // 暂时返回错误，提示使用完整重试
-        Err(TaskError::CrawlError("部分重试功能尚未实现，请使用完整重试".to_string()))
+        Err(TaskError::CrawlError(
+            "重试失败文件功能暂未实现，建议使用「完整重试」重新下载所有文件".to_string()
+        ))
     }
 
     /// 检查任务是否可重试
