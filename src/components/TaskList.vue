@@ -23,7 +23,7 @@
             <tr v-for="task in tasks" :key="task.id" class="border-b border-neutral-500/50">
                 <td :title="task.name" class="max-w-48">{{ task.name }}</td>
                 <td v-if="mode === 'active'" :title="task.url" class="max-w-64">{{ task.url }}</td>
-                <td >
+                <td>
                     <div class="flex items-center justify-center gap-2">
                         <component :is="getStatusIcon(task.status)?.icon" :size="16"
                             :class="getStatusIcon(task.status)?.class" />
@@ -37,63 +37,53 @@
                         </div>
                     </div>
                 </td>
-                <td v-if="mode === 'history'">{{ task.status === 'completed' ? formatTime(task.completeTime ?? '') : '-' }}</td>
+                <td v-if="mode === 'history'">{{ task.status === 'completed' ? formatTime(task.completeTime ?? '') : '-'
+                    }}</td>
                 <td v-if="mode === 'history'" class="max-w-64">
                     <span v-if="(task.status === 'failed' || task.status === 'partial_failed') && task.error"
-                          :title="task.error"
-                          :class="task.status === 'partial_failed' ? 'text-yellow-400' : 'text-red-400'"
-                          class="text-xs truncate">
+                        :title="task.error"
+                        :class="task.status === 'partial_failed' ? 'text-yellow-400' : 'text-red-400'"
+                        class="text-xs truncate">
                         {{ task.error }}
                     </span>
                     <span v-else class="text-neutral-500">-</span>
                 </td>
                 <td v-if="mode === 'history'">
-                    <span v-if="task.startTime && task.completeTime">{{ calculateTimeDifference(task.startTime, task.completeTime) }}</span>
+                    <span v-if="task.startTime && task.completeTime">{{ calculateTimeDifference(task.startTime,
+                        task.completeTime) }}</span>
                     <span v-else class="text-neutral-500">-</span>
                 </td>
-                <td v-if="mode === 'active'" class="text-center">
+                <td class="text-center">
                     <div class="flex items-center justify-center gap-2">
-                        <Button
-                            v-if="canCancel(task.status)"
-                            size="sm"
-                            :disabled="isRetrying(task.id)"
-                            @click="$emit('cancel', task.id)"
-                        >停止下载</Button>
+                        <Button v-if="canCancel(task.status)" size="sm" :disabled="isRetrying(task.id)"
+                            @click="$emit('cancel', task.id)">停止下载</Button>
 
                         <!-- 重试下拉菜单 -->
-                        <div v-if="canRetry(task)" class="relative">
-                            <Button
-                                size="sm"
-                                type="primary"
-                                :disabled="isRetrying(task.id)"
-                                @click="toggleDropdown(task.id)"
-                            >
-                                <RotateCcw :size="14" class="mr-1" v-if="!isRetrying(task.id)" />
-                                <Loader :size="14" class="mr-1 animate-spin" v-else />
-                                {{ getRetryButtonText(task) }}
-                                <ChevronDown :size="14" class="ml-1" />
-                            </Button>
+                        <DropDown v-if="canRetry(task)" v-model="openDropdowns[task.id]" position="bottom-right"
+                            align="end" @select="(value) => handleRetry(task.id, value)">
+                            <template #trigger>
+                                <Button size="sm" type="default" :disabled="isRetrying(task.id)">
+                                    <div class="flex gap-1 items-center">
+                                        <RotateCcw :size="14" class="mr-1" v-if="!isRetrying(task.id)" />
+                                        <Loader :size="14" class="mr-1 animate-spin" v-else />
+                                        {{ getRetryButtonText(task) }}
+                                        <ChevronDown :size="14" class="ml-1" />
+                                    </div>
 
-                            <!-- 下拉菜单内容 -->
-                            <div
-                                v-if="openDropdownId === task.id"
-                                class="absolute top-full mt-1 right-0 bg-neutral-700 border border-neutral-600 rounded-lg shadow-lg z-10 min-w-[140px]"
-                            >
-                                <button
-                                    class="w-full text-left px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-600 rounded-t-lg"
-                                    @click="handleRetry(task.id, 'full')"
-                                >
-                                    完整重试
-                                </button>
-                                <button
-                                    v-if="task.status === 'partial_failed'"
-                                    class="w-full text-left px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-600 rounded-b-lg border-t border-neutral-600"
-                                    @click="handleRetry(task.id, 'failedOnly')"
-                                >
-                                    重试失败文件
-                                </button>
-                            </div>
-                        </div>
+                                </Button>
+                            </template>
+
+                            <button
+                                class="w-full text-left px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-700 rounded-t-lg transition-colors duration-150"
+                                data-value="full">
+                                完整重试
+                            </button>
+                            <button v-if="task.status === 'partial_failed'"
+                                class="w-full text-left px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-700 rounded-b-lg border-t border-neutral-600 transition-colors duration-150"
+                                data-value="failedOnly">
+                                重试失败文件
+                            </button>
+                        </DropDown>
                     </div>
                 </td>
             </tr>
@@ -107,6 +97,7 @@
 import { Loader, ArrowBigDownDash, CircleCheck, CircleX, CircleOff, AlertTriangle, RotateCcw, ChevronDown } from 'lucide-vue-next';
 import { ref } from 'vue';
 import Button from './Button.vue';
+import DropDown from './DropDown.vue';
 // 类型最小替代，避免依赖 wailsjs
 type DownloadTaskLike = {
     id: string;
@@ -136,23 +127,12 @@ const emit = defineEmits<{
 }>();
 
 // 下拉菜单状态管理
-const openDropdownId = ref<string | null>(null);
-
-function toggleDropdown(taskId: string) {
-    openDropdownId.value = openDropdownId.value === taskId ? null : taskId;
-}
+const openDropdowns = ref<Record<string, boolean>>({})
 
 function handleRetry(taskId: string, retryType: 'full' | 'failedOnly') {
-    openDropdownId.value = null;
+    // 下拉菜单会自动关闭（通过 DropDown 组件的 closeOnClick）
     emit('retry', taskId, retryType);
 }
-
-// 点击外部关闭下拉菜单
-document.addEventListener('click', (event) => {
-    if (openDropdownId.value && !(event.target as HTMLElement).closest('.relative')) {
-        openDropdownId.value = null;
-    }
-});
 
 function calculateProgressPercentage(current: number, total: number): number {
     if (total <= 0) return 0;
@@ -199,8 +179,8 @@ function canCancel(status: string): boolean {
 
 function canRetry(task: DownloadTaskLike): boolean {
     return (task.status === 'failed' || task.status === 'partial_failed') &&
-           (task.retryable !== false) &&
-           ((task.retryCount ?? 0) < (task.maxRetries ?? 3));
+        (task.retryable !== false) &&
+        ((task.retryCount ?? 0) < (task.maxRetries ?? 3));
 }
 
 function formatStatus(status: string): string {
