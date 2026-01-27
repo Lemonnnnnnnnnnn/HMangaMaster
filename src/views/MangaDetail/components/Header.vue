@@ -23,6 +23,14 @@
                 </div>
             </Button>
 
+            <Button @click="showZoomControls = !showZoomControls">
+                <div class="flex items-center gap-2">
+                    <ZoomIn v-if="!showZoomControls" :size="16" class="text-white" />
+                    <ZoomOut :size="16" class="text-white" v-else />
+                    <span>图片缩放</span>
+                </div>
+            </Button>
+
             <Button @click="showQuickDownloadModal = true">
                 <div class="flex items-center gap-2">
                     <Download :size="16" class="text-white" />
@@ -53,30 +61,73 @@
             </div>
         </div>
     </Transition>
+    <Transition>
+        <div v-if="showZoomControls" class="fixed bottom-8 left-8">
+            <div class="flex flex-col gap-2">
+                <button
+                    class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90"
+                    @click="handleZoomIn">
+                    <Plus :size="20" class="text-white" />
+                </button>
+
+                <!-- <div class="bg-neutral-900/70 px-4 py-2 rounded-full text-white text-xs text-center">
+                    {{ Math.round(imageZoomLevel * 100) }}%
+                </div> -->
+
+                <button
+                    class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90"
+                    @click="handleZoomOut">
+                    <Minus :size="20" class="text-white" />
+                </button>
+
+                <button
+                    class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90"
+                    @click="handleResetZoom">
+                    <RotateCcw :size="20" class="text-white" />
+                </button>
+            </div>
+        </div>
+    </Transition>
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, Eye, EyeClosed, Trash } from 'lucide-vue-next';
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, Eye, EyeClosed, Trash, ZoomIn, ZoomOut, Plus, Minus, RotateCcw } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
-import { useMangaStore } from '../stores';
-import { storeToRefs } from 'pinia';
 import { Button, QuickDownloadModal } from '../../../components';
 import { onMounted, onUnmounted, ref, type PropType } from 'vue';
 import { MangaService } from '../services';
 
-const router = useRouter();
-const mangaStore = useMangaStore();
-const { mangaName } = storeToRefs(mangaStore);
+interface Props {
+    mangaService: MangaService;
+    mangaName: string;
+    imageZoomLevel: number;
+}
 
-defineProps({
-    mangaService: {
-        type: Object as PropType<MangaService>,
-        required: true
-    }
-})
+defineProps<Props>();
+
+const emit = defineEmits<{
+    zoomIn: [];
+    zoomOut: [];
+    resetZoom: [];
+}>();
+
+const router = useRouter();
 
 let showNavigation = ref(false);
+let showZoomControls = ref(false);
 let showQuickDownloadModal = ref(false);
+
+function handleZoomIn() {
+    emit('zoomIn');
+}
+
+function handleZoomOut() {
+    emit('zoomOut');
+}
+
+function handleResetZoom() {
+    emit('resetZoom');
+}
 
 // 如果按下 ctrl + k ，则显示 QuickDownloadModal
 function handleKeydown(event: KeyboardEvent) {

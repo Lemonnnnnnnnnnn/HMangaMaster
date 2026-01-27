@@ -1,6 +1,13 @@
 <template>
     <div class="flex flex-col h-full over">
-        <Header :mangaService="mangaService" />
+        <Header
+            :mangaService="mangaService"
+            :mangaName="mangaName"
+            :imageZoomLevel="imageZoomLevel"
+            @zoomIn="handleZoomIn"
+            @zoomOut="handleZoomOut"
+            @resetZoom="handleResetZoom"
+        />
 
         <Loading v-if="loading" />
         <div v-else-if="selectedImages.length === 0" class="flex-grow flex flex-col items-center justify-center h-full">
@@ -9,7 +16,11 @@
         <main v-else ref="scrollContainer" @scroll="scrollService.debounceSaveProgress"
             class="flex-grow overflow-y-auto p-5 flex flex-col items-center gap-5 flex-1">
             <div v-for="(image, i) in selectedImages" :key="i">
-                <div class="max-w-[1200px] w-full">
+                <div class="transition-all duration-300"
+                    :style="{
+                        maxWidth: `${1200 * imageZoomLevel}px`,
+                        width: `${100 * imageZoomLevel}%`
+                    }">
                     <img :src="image" :alt="`Manga page ${i + 1}`" class="w-full h-auto block rounded" />
                 </div>
             </div>
@@ -28,13 +39,19 @@ import { useMangaStore } from "./stores";
 import { UrlDecode } from "../../utils";
 
 let scrollContainer = ref<HTMLElement | null>(null);
+const imageZoomLevel = ref(1.0);
 
 const mangaStore = useMangaStore();
-const { loading, selectedImages } =
+const { loading, selectedImages, mangaName } =
     storeToRefs(mangaStore);
 const route = useRoute();
 const scrollService = new ScrollService(scrollContainer, mangaStore);
 const mangaService = new MangaService(scrollService);
+
+// 设置导航回调，重置缩放
+mangaService.onNavigateCallback = () => {
+    imageZoomLevel.value = 1.0;
+};
 
 
 onMounted(() => {
@@ -50,6 +67,22 @@ watch(() => route.params.path, (newPath) => {
 
 function init() {
     mangaService.loadManga(UrlDecode(route.params.path as string));
+}
+
+function handleZoomIn() {
+    if (imageZoomLevel.value < 2.0) {
+        imageZoomLevel.value = Math.min(imageZoomLevel.value + 0.1, 2.0);
+    }
+}
+
+function handleZoomOut() {
+    if (imageZoomLevel.value > 0.5) {
+        imageZoomLevel.value = Math.max(imageZoomLevel.value - 0.1, 0.5);
+    }
+}
+
+function handleResetZoom() {
+    imageZoomLevel.value = 1.0;
 }
 
 </script>

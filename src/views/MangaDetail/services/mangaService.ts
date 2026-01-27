@@ -12,6 +12,7 @@ export class MangaService {
   private router: ReturnType<typeof useRouter>;
   private mangaStore: ReturnType<typeof useMangaStore>;
   private scrollService: ScrollService;
+  public onNavigateCallback?: () => void;
 
   constructor(scrollService: ScrollService) {
     this.scrollService = scrollService;
@@ -124,6 +125,9 @@ export class MangaService {
         this.mangaStore.mangas[this.mangaStore.currentMangaIndex + 1];
       const encodedPath = encodeURIComponent(nextManga.path);
 
+      // 重置缩放
+      this.onNavigateCallback?.();
+
       // 使用替代路由方案处理相同路径不同参数的导航
       const currentLocation = window.location.href;
       if (currentLocation.includes("/manga/")) {
@@ -144,6 +148,9 @@ export class MangaService {
       const prevManga =
         this.mangaStore.mangas[this.mangaStore.currentMangaIndex - 1];
       const encodedPath = encodeURIComponent(prevManga.path);
+
+      // 重置缩放
+      this.onNavigateCallback?.();
 
       // 使用替代路由方案处理相同路径不同参数的导航
       const currentLocation = window.location.href;
@@ -186,6 +193,10 @@ export class MangaService {
           // 删除成功后，清除该漫画的阅读进度
           ProgressService.removeProgress(this.mangaStore.mangaPath);
           toast.success("删除成功");
+
+          // 重置缩放
+          this.onNavigateCallback?.();
+
           if (nextMangaPath) {
             // 重要：在导航前设置 loading 为 false，防止新页面保持加载状态
             this.mangaStore.loading = false;
