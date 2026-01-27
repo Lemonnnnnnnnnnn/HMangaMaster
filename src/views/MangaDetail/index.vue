@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col h-full over">
+    <div class="flex flex-col h-full relative">
         <Header
             :mangaService="mangaService"
             :mangaName="mangaName"

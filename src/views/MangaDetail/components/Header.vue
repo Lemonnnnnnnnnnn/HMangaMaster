@@ -48,13 +48,13 @@
     </header>
     <QuickDownloadModal v-model="showQuickDownloadModal" />
     <Transition>
-        <div v-if="showNavigation" class="fixed bottom-8 right-8">
+        <div v-if="showNavigation" class="absolute bottom-8 right-8">
             <div class="flex flex-col gap-2">
-                <button class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90"
+                <button class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90 border border-white/20"
                     @click="mangaService.navigateToNextManga()">
                     <ChevronRight :size="20" class="text-white" />
                 </button>
-                <button class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90"
+                <button class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90 border border-white/20"
                     @click="mangaService.navigateToPrevManga()">
                     <ChevronLeft :size="20" class="text-white" />
                 </button>
@@ -62,22 +62,22 @@
         </div>
     </Transition>
     <Transition>
-        <div v-if="showZoomControls" class="fixed bottom-8 left-8">
+        <div v-if="showZoomControls" class="absolute bottom-8 left-8">
             <div class="flex flex-col gap-2">
                 <button
-                    class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90"
+                    class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90 border border-white/20"
                     @click="handleZoomIn">
                     <Plus :size="20" class="text-white" />
                 </button>
 
                 <button
-                    class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90"
+                    class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90 border border-white/20"
                     @click="handleZoomOut">
                     <Minus :size="20" class="text-white" />
                 </button>
 
                 <button
-                    class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90"
+                    class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90 border border-white/20"
                     @click="handleResetZoom">
                     <RotateCcw :size="20" class="text-white" />
                 </button>
