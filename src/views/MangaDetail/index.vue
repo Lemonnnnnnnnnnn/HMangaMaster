@@ -3,10 +3,7 @@
         <Header
             :mangaService="mangaService"
             :mangaName="mangaName"
-            :imageZoomLevel="imageZoomLevel"
-            @zoomIn="handleZoomIn"
-            @zoomOut="handleZoomOut"
-            @resetZoom="handleResetZoom"
+            :zoomService="zoomService"
         />
 
         <Loading v-if="loading" />
@@ -18,8 +15,8 @@
             <div v-for="(image, i) in selectedImages" :key="i">
                 <div class="transition-all duration-300"
                     :style="{
-                        maxWidth: `${1200 * imageZoomLevel}px`,
-                        width: `${100 * imageZoomLevel}%`
+                        maxWidth: `${1200 * zoomService.getZoomLevel().value}px`,
+                        width: `${100 * zoomService.getZoomLevel().value}%`
                     }">
                     <img :src="image" :alt="`Manga page ${i + 1}`" class="w-full h-auto block rounded" />
                 </div>
@@ -34,12 +31,11 @@ import { onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { Loading } from "../../components";
 import { Header } from "./components";
-import { MangaService, ScrollService } from "./services";
+import { MangaService, ScrollService, ZoomService } from "./services";
 import { useMangaStore } from "./stores";
 import { UrlDecode } from "../../utils";
 
 let scrollContainer = ref<HTMLElement | null>(null);
-const imageZoomLevel = ref(1.0);
 
 const mangaStore = useMangaStore();
 const { loading, selectedImages, mangaName } =
@@ -47,10 +43,11 @@ const { loading, selectedImages, mangaName } =
 const route = useRoute();
 const scrollService = new ScrollService(scrollContainer, mangaStore);
 const mangaService = new MangaService(scrollService);
+const zoomService = new ZoomService();
 
 // 设置导航回调，重置缩放
 mangaService.onNavigateCallback = () => {
-    imageZoomLevel.value = 1.0;
+    zoomService.reset();
 };
 
 
@@ -67,22 +64,6 @@ watch(() => route.params.path, (newPath) => {
 
 function init() {
     mangaService.loadManga(UrlDecode(route.params.path as string));
-}
-
-function handleZoomIn() {
-    if (imageZoomLevel.value < 2.0) {
-        imageZoomLevel.value = Math.min(imageZoomLevel.value + 0.1, 2.0);
-    }
-}
-
-function handleZoomOut() {
-    if (imageZoomLevel.value > 0.5) {
-        imageZoomLevel.value = Math.max(imageZoomLevel.value - 0.1, 0.5);
-    }
-}
-
-function handleResetZoom() {
-    imageZoomLevel.value = 1.0;
 }
 
 </script>

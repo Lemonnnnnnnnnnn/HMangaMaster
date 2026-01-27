@@ -70,10 +70,6 @@
                     <Plus :size="20" class="text-white" />
                 </button>
 
-                <!-- <div class="bg-neutral-900/70 px-4 py-2 rounded-full text-white text-xs text-center">
-                    {{ Math.round(imageZoomLevel * 100) }}%
-                </div> -->
-
                 <button
                     class="bg-neutral-900/70 p-3 rounded-full cursor-pointer hover:bg-neutral-900/90"
                     @click="handleZoomOut">
@@ -94,22 +90,16 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, Eye, EyeClosed, Trash, ZoomIn, ZoomOut, Plus, Minus, RotateCcw } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 import { Button, QuickDownloadModal } from '../../../components';
-import { onMounted, onUnmounted, ref, type PropType } from 'vue';
-import { MangaService } from '../services';
+import { onMounted, onUnmounted, ref } from 'vue';
+import { MangaService, ZoomService } from '../services';
 
 interface Props {
     mangaService: MangaService;
     mangaName: string;
-    imageZoomLevel: number;
+    zoomService: ZoomService;
 }
 
-defineProps<Props>();
-
-const emit = defineEmits<{
-    zoomIn: [];
-    zoomOut: [];
-    resetZoom: [];
-}>();
+const props = defineProps<Props>();
 
 const router = useRouter();
 
@@ -118,15 +108,15 @@ let showZoomControls = ref(false);
 let showQuickDownloadModal = ref(false);
 
 function handleZoomIn() {
-    emit('zoomIn');
+    props.zoomService.zoomIn();
 }
 
 function handleZoomOut() {
-    emit('zoomOut');
+    props.zoomService.zoomOut();
 }
 
 function handleResetZoom() {
-    emit('resetZoom');
+    props.zoomService.reset();
 }
 
 // 如果按下 ctrl + k ，则显示 QuickDownloadModal
