@@ -17,6 +17,12 @@ pub struct DownloadTaskDTO {
     pub failed_count: i32,
     pub name: String,
     pub progress: Progress,
+    #[serde(default = "default_retryable")]
+    pub retryable: bool,
+}
+
+fn default_retryable() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

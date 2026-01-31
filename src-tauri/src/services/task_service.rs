@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::config::service::ConfigService;
+use crate::history;
 use crate::services::{CrawlService};
 
 /// 任务服务错误类型
@@ -223,21 +224,34 @@ impl TaskService {
         app: &AppHandle,
         state: &AppState,
     ) -> Result<(), TaskError> {
-        // 检查任务是否可重试
-        let task = state.task_manager.read().by_id(task_id)
-            .ok_or_else(|| TaskError::CrawlError("任务不存在".to_string()))?;
+        // 1. 先尝试在 active tasks 中查找
+        let task = if let Some(task) = state.task_manager.read().by_id(task_id) {
+            task
+        } else {
+            // 2. 如果 active 中找不到，从 history 加载
+            let mut history_manager = history::Manager::default();
+            history_manager.set_dir_from_app(app)
+                .map_err(|e| TaskError::HistoryError(format!("无法访问历史记录目录: {}", e)))?;
 
+            let history_tasks = history_manager.get_history();
+
+            let task_dto = history_tasks.iter()
+                .find(|t| t.id == task_id)
+                .ok_or_else(|| TaskError::CrawlError("任务不存在".to_string()))?;
+
+            // 3. 将 DTO 转换回 Task 并加入 active manager
+            self.restore_task_from_history(task_dto, state)
+        };
+
+        // 4. 检查任务是否可重试
         if !self.is_task_retryable(&task) {
-            return Err(TaskError::CrawlError("任务不可重试或已达到最大重试次数".to_string()));
+            return Err(TaskError::CrawlError("任务不可重试".to_string()));
         }
 
-        // 增加重试计数
-        state.task_manager.read().increment_retry_count(task_id);
-
-        // 重置任务状态为解析中
+        // 5. 重置任务状态为解析中
         state.task_manager.read().reset_for_full_retry(task_id);
 
-        // 重新执行任务
+        // 6. 重新执行任务
         Self::execute_crawl_task_internal(task_id, &task.url, app, state).await?;
 
         Ok(())
@@ -261,10 +275,60 @@ impl TaskService {
     pub fn is_task_retryable(&self, task: &crate::task::Task) -> bool {
         match task.status {
             crate::task::TaskStatus::Failed | crate::task::TaskStatus::PartialFailed => {
-                task.retryable && task.retry_count < task.max_retries
+                task.retryable
             }
             _ => false,
         }
+    }
+
+    /// 从历史任务 DTO 恢复为 Task 并加入 active manager
+    fn restore_task_from_history(
+        &self,
+        task_dto: &history::DownloadTaskDTO,
+        state: &AppState,
+    ) -> crate::task::Task {
+        use crate::task::{Task, TaskStatus};
+
+        // 将 status 字符串转换为 TaskStatus
+        let status = match task_dto.status.as_str() {
+            "parsing" => TaskStatus::Parsing,
+            "queued" => TaskStatus::Queued,
+            "downloading" => TaskStatus::Running,
+            "completed" => TaskStatus::Completed,
+            "partial_failed" => TaskStatus::PartialFailed,
+            "failed" => TaskStatus::Failed,
+            "cancelled" => TaskStatus::Cancelled,
+            _ => TaskStatus::Pending,
+        };
+
+        // 创建新的 Task 实例
+        let task = Task {
+            id: task_dto.id.clone(),
+            url: task_dto.url.clone(),
+            name: task_dto.name.clone(),
+            status,
+            save_path: task_dto.save_path.clone(),
+            error: task_dto.error.clone(),
+            failed_count: task_dto.failed_count,
+            progress: crate::task::Progress {
+                current: task_dto.progress.current,
+                total: task_dto.progress.total,
+            },
+            start_time: task_dto.start_time.clone(),
+            complete_time: task_dto.complete_time.clone(),
+            updated_at: task_dto.updated_at.clone(),
+            last_retry_time: String::new(), // 从历史恢复时重置
+            retryable: task_dto.retryable,
+        };
+
+        // 修复死锁：不要持有 task_manager 写锁的同时获取 tasks 写锁
+        // 使用读锁获取 task_manager，然后获取 tasks 的写锁
+        {
+            let manager = state.task_manager.read();
+            manager.tasks.write().insert(task.id.clone(), task.clone());
+        }
+
+        task
     }
 
 }

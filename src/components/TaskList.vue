@@ -96,10 +96,13 @@
 <script setup lang="ts">
 import { Loader, ArrowBigDownDash, CircleCheck, CircleX, CircleOff, AlertTriangle, RotateCcw, ChevronDown } from 'lucide-vue-next';
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import Button from './Button.vue';
 import DropDown from './DropDown.vue';
 import { useDownloadStore } from '@/views/Download/stores';
+
+const router = useRouter();
 // 类型最小替代，避免依赖 wailsjs
 type DownloadTaskLike = {
     id: string;
@@ -112,8 +115,6 @@ type DownloadTaskLike = {
     progress?: { current?: number; total?: number } | null;
     startTime?: string;
     completeTime?: string;
-    retryCount?: number;
-    maxRetries?: number;
     retryable?: boolean;
 };
 
@@ -133,18 +134,27 @@ const downloadStore = useDownloadStore();
 const openDropdowns = ref<Record<string, boolean>>({})
 
 async function handleRetry(taskId: string, retryType: 'full' | 'failedOnly') {
-    try {
-        if (retryType === 'full') {
-            await downloadStore.retryTask(taskId);
-            toast.success('任务重试已启动');
-        } else {
-            await downloadStore.retryFailedFilesOnly(taskId);
-            toast.success('失败文件重试已启动');
-        }
-    } catch (err) {
+    const retryPromise = retryType === 'full'
+        ? downloadStore.retryTask(taskId)
+        : downloadStore.retryFailedFilesOnly(taskId);
+
+    // 立即显示 toast 并开始重试（不等待完成）
+    toast.promise(retryPromise, {
+        loading: '启动任务重试...',
+        success: '任务重试已启动',
+        error: '重试任务失败',
+        description: '正在后台处理，请稍候...'
+    });
+
+    // 非阻塞：立即导航回下载页（不等待重试完成）
+    router.push('/download').catch(err => {
+        console.error('导航失败:', err);
+    });
+
+    // 后台处理重试结果
+    retryPromise.catch(err => {
         console.error('重试任务失败:', err);
-        toast.error('重试任务失败');
-    }
+    });
 }
 
 function calculateProgressPercentage(current: number, total: number): number {
@@ -192,8 +202,7 @@ function canCancel(status: string): boolean {
 
 function canRetry(task: DownloadTaskLike): boolean {
     return (task.status === 'failed' || task.status === 'partial_failed') &&
-        (task.retryable !== false) &&
-        ((task.retryCount ?? 0) < (task.maxRetries ?? 3));
+        (task.retryable !== false);
 }
 
 function formatStatus(status: string): string {
@@ -211,9 +220,7 @@ function formatStatus(status: string): string {
 }
 
 function getRetryButtonText(task: DownloadTaskLike): string {
-    const retryCount = task.retryCount ?? 0;
-    const maxRetries = task.maxRetries ?? 3;
-    return `重试 (${retryCount}/${maxRetries})`;
+    return '重试';
 }
 
 function isRetrying(taskId: string): boolean {

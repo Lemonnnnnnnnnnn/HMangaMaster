@@ -21,7 +21,7 @@ export const useDownloadStore = defineStore('downloadStore', {
   actions: {
     async initializeStore() {
       try {
-        await this.pollTasks();
+        // 直接启动轮询，让第一次轮询在 1 秒后自然发生，避免阻塞
         this.startPolling();
       } catch (err) {
         console.error('初始化store失败:', err);
@@ -56,10 +56,12 @@ export const useDownloadStore = defineStore('downloadStore', {
     },
 
     async retryTask(taskId: string) {
+      if (this.retryingTasks.has(taskId)) return;
+
+      this.retryingTasks.add(taskId);
+
       try {
-        this.retryingTasks.add(taskId);
         await invoke<void>('task_retry', { taskId });
-        await this.pollTasks();
       } catch (err) {
         console.error('重试任务出错:', err);
         throw err;
@@ -69,10 +71,12 @@ export const useDownloadStore = defineStore('downloadStore', {
     },
 
     async retryFailedFilesOnly(taskId: string) {
+      if (this.retryingTasks.has(taskId)) return;
+
+      this.retryingTasks.add(taskId);
+
       try {
-        this.retryingTasks.add(taskId);
         await invoke<void>('task_retry_failed_files_only', { taskId });
-        await this.pollTasks();
       } catch (err) {
         console.error('重试失败文件出错:', err);
         throw err;

@@ -275,6 +275,7 @@ impl TaskManager {
                             current: t.progress.current,
                             total: t.progress.total,
                         },
+                        retryable: t.retryable,
                     };
                     drop(w);
                     let mut hm = history::Manager::default();
@@ -310,16 +311,6 @@ impl TaskManager {
         token
     }
 
-    /// 增加重试计数
-    pub fn increment_retry_count(&self, task_id: &str) {
-        let mut w = self.tasks.write();
-        if let Some(task) = w.get_mut(task_id) {
-            task.retry_count += 1;
-            task.last_retry_time = now_str();
-            task.updated_at = now_str();
-        }
-    }
-
     /// 重置任务状态为完整重试（重新解析和下载）
     pub fn reset_for_full_retry(&self, task_id: &str) {
         let mut w = self.tasks.write();
@@ -328,6 +319,7 @@ impl TaskManager {
             task.progress = Progress::default();
             task.failed_count = 0;
             task.error = String::new();
+            task.last_retry_time = now_str();
             task.updated_at = now_str();
         }
     }
