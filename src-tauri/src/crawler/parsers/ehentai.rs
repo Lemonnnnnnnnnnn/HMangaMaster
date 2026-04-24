@@ -6,10 +6,58 @@ use crate::config::service::ConfigService;
 use reqwest::header::{HeaderMap, COOKIE};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use url::Url;
 
 
 
 pub struct EhentaiParser;
+
+fn parse_page_index_from_href(href: &str) -> Option<usize> {
+    let parsed = Url::parse(href).ok()?;
+    parsed
+        .query_pairs()
+        .find_map(|(key, value)| (key == "p").then_some(value))
+        .and_then(|value| value.parse::<usize>().ok())
+}
+
+fn build_gallery_page_urls(base_url: &str, max_page_index: usize) -> anyhow::Result<Vec<String>> {
+    let mut parsed = Url::parse(base_url)?;
+    let retained_pairs: Vec<(String, String)> = parsed
+        .query_pairs()
+        .filter(|(key, _)| key != "p")
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .collect();
+
+    let mut page_urls = Vec::with_capacity(max_page_index + 1);
+    for page_index in 0..=max_page_index {
+        let page_index_string = page_index.to_string();
+        parsed.query_pairs_mut().clear().extend_pairs(
+            retained_pairs
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.as_str()))
+                .chain(std::iter::once(("p", page_index_string.as_str()))),
+        );
+        page_urls.push(parsed.to_string());
+    }
+
+    Ok(page_urls)
+}
+
+fn discover_gallery_page_urls(doc: &scraper::Html, url: &str) -> anyhow::Result<Vec<String>> {
+    let max_page_index = scraper::Selector::parse("body > .gtb td a")
+        .ok()
+        .and_then(|selector| {
+            doc.select(&selector)
+                .filter_map(|a| a.value().attr("href"))
+                .filter_map(parse_page_index_from_href)
+                .max()
+        });
+
+    match max_page_index {
+        Some(max_page_index) => build_gallery_page_urls(url, max_page_index),
+        None => Ok(vec![url.to_string()]),
+    }
+}
 
 impl EhentaiParser {
     pub fn new() -> Self {
@@ -38,17 +86,7 @@ impl EhentaiParser {
         };
 
         // 提取页面URLs
-        let mut page_urls: Vec<String> = vec![url.to_string()];
-        if let Ok(sel_gtb) = scraper::Selector::parse("body > .gtb") {
-            if let Some(gtb) = doc.select(&sel_gtb).next() {
-                let sel_td = scraper::Selector::parse("td a").unwrap();
-                for a in gtb.select(&sel_td) {
-                    if let Some(href) = a.value().attr("href") {
-                        page_urls.push(href.to_string());
-                    }
-                }
-            }
-        }
+        let mut page_urls = discover_gallery_page_urls(&doc, url)?;
 
         // 稳定去重，保留首次出现的顺序
         {
@@ -291,4 +329,85 @@ pub fn register() {
     use crate::crawler::factory::{register, register_host_contains};
     register("ehentai", || Box::new(EhentaiParser::new()));
     register_host_contains("ehentai", vec!["e-hentai.org", "exhentai.org"]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discovers_full_page_range_from_windowed_pagination_links() {
+        let html = r#"
+            <html>
+                <body>
+                    <table class="gtb">
+                        <tr>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=0">1</a></td>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=1">2</a></td>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=2">3</a></td>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=3">4</a></td>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=4">5</a></td>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=5">6</a></td>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=6">7</a></td>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=42">43</a></td>
+                        </tr>
+                    </table>
+                </body>
+            </html>
+        "#;
+        let doc = scraper::Html::parse_document(html);
+
+        let page_urls = discover_gallery_page_urls(&doc, "https://e-hentai.org/g/123/abc/")
+            .expect("should build full gallery page list");
+
+        assert_eq!(page_urls.len(), 43);
+        assert_eq!(page_urls.first().unwrap(), "https://e-hentai.org/g/123/abc/?p=0");
+        assert_eq!(page_urls.last().unwrap(), "https://e-hentai.org/g/123/abc/?p=42");
+    }
+
+    #[test]
+    fn falls_back_to_current_url_when_no_page_index_links_exist() {
+        let html = r#"
+            <html>
+                <body>
+                    <table class="gtb">
+                        <tr>
+                            <td><a href="https://e-hentai.org/g/123/abc/">1</a></td>
+                        </tr>
+                    </table>
+                </body>
+            </html>
+        "#;
+        let doc = scraper::Html::parse_document(html);
+
+        let page_urls = discover_gallery_page_urls(&doc, "https://e-hentai.org/g/123/abc/")
+            .expect("should keep single page galleries");
+
+        assert_eq!(page_urls, vec!["https://e-hentai.org/g/123/abc/".to_string()]);
+    }
+
+    #[test]
+    fn ignores_invalid_pagination_links_when_inferring_last_page() {
+        let html = r#"
+            <html>
+                <body>
+                    <table class="gtb">
+                        <tr>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=0">1</a></td>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=bad">2</a></td>
+                            <td><a href="https://e-hentai.org/g/123/abc/?foo=bar">3</a></td>
+                            <td><a href="https://e-hentai.org/g/123/abc/?p=9">10</a></td>
+                        </tr>
+                    </table>
+                </body>
+            </html>
+        "#;
+        let doc = scraper::Html::parse_document(html);
+
+        let page_urls = discover_gallery_page_urls(&doc, "https://e-hentai.org/g/123/abc/")
+            .expect("should skip malformed page links");
+
+        assert_eq!(page_urls.len(), 10);
+        assert_eq!(page_urls[9], "https://e-hentai.org/g/123/abc/?p=9");
+    }
 }
