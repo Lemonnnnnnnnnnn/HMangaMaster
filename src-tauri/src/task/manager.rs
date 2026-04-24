@@ -9,7 +9,7 @@ use crate::history;
 use crate::request::Client as RequestClient;
 use reqwest::header::HeaderMap;
 
-use super::{Progress, Task, TaskStatus};
+use super::{FailedFile, Progress, Task, TaskStatus};
 
 /// Parameters for starting a batch download task
 pub struct BatchDownloadParams {
@@ -17,6 +17,7 @@ pub struct BatchDownloadParams {
     pub task_id: String,
     pub urls: Vec<String>,
     pub paths: Vec<std::path::PathBuf>,
+    pub indices: Option<Vec<usize>>,
     pub client: RequestClient,
     pub token_opt: Option<CancellationToken>,
     pub default_headers: Option<HeaderMap>,
@@ -38,6 +39,40 @@ impl Default for TaskManager {
             download_concurrency: 8,
             max_concurrent_tasks,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn full_retry_reset_clears_failed_files() {
+        let manager = TaskManager::default();
+        {
+            let mut tasks = manager.tasks.write();
+            tasks.insert(
+                "task-1".to_string(),
+                Task {
+                    id: "task-1".to_string(),
+                    status: TaskStatus::PartialFailed,
+                    failed_count: 1,
+                    failed_files: vec![crate::task::FailedFile {
+                        index: 0,
+                        url: "https://example.test/1.jpg".to_string(),
+                        path: "D:/manga/0001.jpg".to_string(),
+                        error: "bad status: 500".to_string(),
+                    }],
+                    ..Task::default()
+                },
+            );
+        }
+
+        manager.reset_for_full_retry("task-1");
+
+        let task = manager.by_id("task-1").unwrap();
+        assert_eq!(task.failed_count, 0);
+        assert!(task.failed_files.is_empty());
     }
 }
 
@@ -181,49 +216,63 @@ impl TaskManager {
             Downloader::new_with_headers(client, DownloadConfig::default(), params.default_headers);
         let token = params.token_opt.unwrap_or_default();
         let total = params.urls.len() as i32;
+        let indices = params
+            .indices
+            .unwrap_or_else(|| (0..params.urls.len()).collect());
         {
             let mut w = self.tasks.write();
             let t = w.entry(params.task_id.clone()).or_default();
             t.progress.total = total;
+            t.progress.current = 0;
             t.status = TaskStatus::Running;
+            t.failed_count = 0;
+            t.failed_files.clear();
+            t.error.clear();
             t.updated_at = now_str();
         }
         let ct = token.clone();
         let tm = self.tasks.clone();
         tauri::async_runtime::spawn(async move {
             #[allow(clippy::useless_conversion)]
-            let mut stream = stream::iter(params.urls.into_iter().zip(params.paths.into_iter()).map(|(u, p)| {
+            let mut stream = stream::iter(params.urls.into_iter().zip(params.paths.into_iter()).zip(indices.into_iter()).map(|((u, p), index)| {
                 let d = downloader.clone();
                 let cancel = ct.clone();
                 async move {
+                    let path = p.to_string_lossy().to_string();
                     if cancel.is_cancelled() {
-                        let res: anyhow::Result<()> = Err(anyhow::anyhow!("cancelled"));
-                        return res;
+                        return (index, u, path, Err("cancelled".to_string()));
                     }
 
-                    d.download_file(&u, &p).await
+                    let res = d.download_file(&u, &p).await.map_err(|e| e.to_string());
+                    (index, u, path, res)
                 }
             }))
             .buffer_unordered(concurrency);
 
             let mut current: i32 = 0;
             let mut failed_count: i32 = 0;
-            while let Some(res) = stream.next().await {
+            let mut failed_files: Vec<FailedFile> = Vec::new();
+            while let Some((index, url, path, res)) = stream.next().await {
                 current += 1;
-                if res.is_err() {
+                if let Err(error) = res {
                     failed_count += 1;
+                    failed_files.push(FailedFile {
+                        index,
+                        url,
+                        path,
+                        error,
+                    });
                 }
                 let mut w = tm.write();
                 if let Some(t) = w.get_mut(&params.task_id) {
                     t.progress.current = current;
                     t.progress.total = total;
                     t.failed_count = failed_count;
+                    t.failed_files = failed_files.clone();
                     t.updated_at = now_str();
-                }
-                if res.is_err() {
-                    if let Some(t) = w.get_mut(&params.task_id) {
+                    if let Some(last_failed) = failed_files.last() {
                         if t.error.is_empty() {
-                            t.error = format!("{:?}", res.err());
+                            t.error = last_failed.error.clone();
                         }
                     }
                 }
@@ -270,6 +319,7 @@ impl TaskManager {
                         updated_at: t.updated_at.clone(),
                         error: error_msg.clone(),
                         failed_count: t.failed_count,
+                        failed_files: t.failed_files.clone(),
                         name: t.name.clone(),
                         progress: history::Progress {
                             current: t.progress.current,
@@ -318,6 +368,7 @@ impl TaskManager {
             task.status = TaskStatus::Parsing;
             task.progress = Progress::default();
             task.failed_count = 0;
+            task.failed_files.clear();
             task.error = String::new();
             task.last_retry_time = now_str();
             task.updated_at = now_str();
@@ -325,16 +376,17 @@ impl TaskManager {
     }
 
     /// 重置失败文件以便重试（仅重试失败的文件）
-    pub fn reset_failed_files_for_retry(&self, task_id: &str) -> Result<(), String> {
+    pub fn reset_failed_files_for_retry(&self, task_id: &str, total: i32) -> Result<(), String> {
         let mut w = self.tasks.write();
         if let Some(task) = w.get_mut(task_id) {
             if task.status == TaskStatus::PartialFailed {
                 // 重置进度，只重试失败的文件
-                let success_count = task.progress.total - task.failed_count;
-                task.progress.current = success_count;
+                task.progress = Progress { current: 0, total };
                 task.failed_count = 0;
+                task.failed_files.clear();
                 task.error = String::new();
                 task.status = TaskStatus::Running;
+                task.last_retry_time = now_str();
                 task.updated_at = now_str();
                 Ok(())
             } else {

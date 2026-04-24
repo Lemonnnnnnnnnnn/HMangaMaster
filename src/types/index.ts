@@ -7,8 +7,17 @@ export type DownloadTaskDTO = {
     complete_time: string;
     updated_at: string;
     error: string;
+    failedCount?: number;
+    failedFiles?: FailedFile[];
     name: string;
     progress: Progress;
+}
+
+export type FailedFile = {
+    index: number;
+    url: string;
+    path: string;
+    error: string;
 }
 
 type Progress = {

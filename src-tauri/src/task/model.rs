@@ -16,6 +16,15 @@ pub enum TaskStatus {
 #[serde(rename_all = "camelCase")]
 pub struct Progress { pub current: i32, pub total: i32 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FailedFile {
+    pub index: usize,
+    pub url: String,
+    pub path: String,
+    pub error: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskStatusInfo {
@@ -34,6 +43,8 @@ pub struct Task {
     pub name: String,
     pub error: String,
     pub failed_count: i32,
+    #[serde(default)]
+    pub failed_files: Vec<FailedFile>,
     pub progress: Progress,
     pub start_time: String,
     pub complete_time: String,
@@ -52,6 +63,7 @@ impl Default for Task {
             name: String::new(),
             error: String::new(),
             failed_count: 0,
+            failed_files: Vec::new(),
             progress: Progress::default(),
             start_time: String::new(),
             complete_time: String::new(),
@@ -59,6 +71,35 @@ impl Default for Task {
             last_retry_time: String::new(),
             retryable: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failed_file_serializes_with_camel_case_fields() {
+        let failed_file = FailedFile {
+            index: 3,
+            url: "https://example.test/3.jpg".to_string(),
+            path: "D:/manga/0003.jpg".to_string(),
+            error: "bad status: 500".to_string(),
+        };
+
+        let json = serde_json::to_value(failed_file).unwrap();
+
+        assert_eq!(json["index"], 3);
+        assert_eq!(json["url"], "https://example.test/3.jpg");
+        assert_eq!(json["path"], "D:/manga/0003.jpg");
+        assert_eq!(json["error"], "bad status: 500");
+    }
+
+    #[test]
+    fn default_task_has_no_failed_files() {
+        let task = Task::default();
+
+        assert!(task.failed_files.is_empty());
     }
 }
 

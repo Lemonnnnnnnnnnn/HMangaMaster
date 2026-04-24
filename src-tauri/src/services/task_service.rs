@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use tauri::{AppHandle, Emitter};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -118,6 +120,7 @@ impl TaskService {
             task_id: task_id.to_string(),
             urls,
             paths,
+            indices: None,
             client,
             token_opt: Some(cancel_token.clone()),
             default_headers: parsed.download_headers,
@@ -258,17 +261,90 @@ impl TaskService {
     }
 
     /// 部分重试失败的任务（仅重试失败的文件）
-    // TODO: 需要存储原始URL和路径信息以实现此功能
     pub async fn retry_failed_files_only(
         &self,
-        _task_id: &str,
-        _app: &AppHandle,
-        _state: &AppState,
+        task_id: &str,
+        app: &AppHandle,
+        state: &AppState,
     ) -> Result<(), TaskError> {
-        // 暂时返回错误，提示使用完整重试
-        Err(TaskError::CrawlError(
-            "重试失败文件功能暂未实现，建议使用「完整重试」重新下载所有文件".to_string()
-        ))
+        let task = if let Some(task) = state.task_manager.read().by_id(task_id) {
+            task
+        } else {
+            let mut history_manager = history::Manager::default();
+            history_manager.set_dir_from_app(app)
+                .map_err(|e| TaskError::HistoryError(format!("无法访问历史记录目录: {}", e)))?;
+
+            let history_tasks = history_manager.get_history();
+            let task_dto = history_tasks.iter()
+                .find(|t| t.id == task_id)
+                .ok_or_else(|| TaskError::CrawlError("任务不存在".to_string()))?;
+
+            self.restore_task_from_history(task_dto, state)
+        };
+
+        if task.status != crate::task::TaskStatus::PartialFailed || !task.retryable {
+            return Err(TaskError::CrawlError("任务不可部分重试".to_string()));
+        }
+
+        if task.failed_files.is_empty() {
+            return Err(TaskError::CrawlError(
+                "没有失败文件清单，请使用「完整重试」重新下载所有文件".to_string(),
+            ));
+        }
+
+        let failed_files = task.failed_files.clone();
+        let urls = failed_files.iter().map(|file| file.url.clone()).collect::<Vec<_>>();
+        let paths = failed_files
+            .iter()
+            .map(|file| PathBuf::from(&file.path))
+            .collect::<Vec<_>>();
+        let indices = failed_files.iter().map(|file| file.index).collect::<Vec<_>>();
+        let client = state.request.read().clone();
+        let header_probe_token = CancellationToken::new();
+        let parsed_for_retry = CrawlService::parse_and_validate(
+            &client,
+            &task.url,
+            task_id,
+            &state.task_manager,
+            &header_probe_token,
+            Some(state),
+        )
+        .await
+        .ok();
+        let default_headers = parsed_for_retry
+            .as_ref()
+            .and_then(|parsed| parsed.download_headers.clone());
+        let concurrency_override = parsed_for_retry
+            .as_ref()
+            .and_then(|parsed| parsed.recommended_concurrency);
+
+        state
+            .task_manager
+            .read()
+            .reset_failed_files_for_retry(task_id, failed_files.len() as i32)
+            .map_err(TaskError::CrawlError)?;
+
+        let cancel_token = CancellationToken::new();
+        state
+            .cancels
+            .write()
+            .insert(task_id.to_string(), cancel_token.clone());
+
+        let batch_params = crate::task::manager::BatchDownloadParams {
+            app: app.clone(),
+            task_id: task_id.to_string(),
+            urls,
+            paths,
+            indices: Some(indices),
+            client,
+            token_opt: Some(cancel_token.clone()),
+            default_headers,
+            concurrency_override,
+        };
+        let token = state.task_manager.read().start_batch_with_concurrency(batch_params);
+        state.cancels.write().insert(task_id.to_string(), token);
+
+        Ok(())
     }
 
     /// 检查任务是否可重试
@@ -310,6 +386,7 @@ impl TaskService {
             save_path: task_dto.save_path.clone(),
             error: task_dto.error.clone(),
             failed_count: task_dto.failed_count,
+            failed_files: task_dto.failed_files.clone(),
             progress: crate::task::Progress {
                 current: task_dto.progress.current,
                 total: task_dto.progress.total,
